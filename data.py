@@ -234,6 +234,26 @@ def bitcoin() -> dict:
     }
 
 
+# --------------------------------------------------------------------------- Argentina (DolarApi)
+@st.cache_data(ttl=900, show_spinner=False)
+def dolares_ar() -> dict:
+    """Argentine dollar rates (official, MEP, blue...) from the free public DolarApi."""
+    rows = _get_json("https://dolarapi.com/v1/dolares") or []
+    out = {}
+    for r in rows:
+        if r.get("casa") and r.get("venta"):
+            ts = r.get("fechaActualizacion")
+            try:
+                when = dt.datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(ET) if ts else None
+            except ValueError:
+                when = None
+            out[r["casa"]] = {"name": r.get("nombre") or r["casa"], "buy": r.get("compra"),
+                              "sell": float(r["venta"]), "time": when}
+    if not out:
+        raise DataError("No Argentine dollar rates available.")
+    return out
+
+
 # --------------------------------------------------------------------------- FRED
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def fred_latest(series_id: str = "DGS10") -> dict:

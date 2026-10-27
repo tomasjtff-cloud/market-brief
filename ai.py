@@ -39,33 +39,92 @@ def _spend_budget() -> None:
     u["count"] += 1
 
 
+MODEL_PATTERN = re.compile(r"^gemini-(\d+(?:\.\d+)?)-(flash-lite|flash|pro)(.*)$")
+SKIP_VARIANTS = ("image", "tts", "audio", "live", "embedding", "vision", "thinking", "native")
+
+
+def _model_score(name: str) -> float | None:
+    """Prefer the newest stable Flash model; Pro is usually not on the free tier."""
+    m = MODEL_PATTERN.match(name)
+    if not m or any(v in m.group(3) for v in SKIP_VARIANTS):
+        return None
+    score = float(m.group(1)) * 10 + {"flash": 3, "flash-lite": 2, "pro": -5}[m.group(2)]
+    if "preview" in m.group(3) or "exp" in m.group(3):
+        score -= 4
+    return score
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def available_models(_key: str) -> list[str]:
+    """Ask Google which models this key can use, best first."""
+    resp = requests.get(
+        "https://generativelanguage.googleapis.com/v1beta/models",
+        headers={"x-goog-api-key": _key}, params={"pageSize": 200}, timeout=20,
+    )
+    resp.raise_for_status()
+    names = [
+        m["name"].split("/", 1)[-1]
+        for m in resp.json().get("models", [])
+        if "generateContent" in m.get("supportedGenerationMethods", [])
+    ]
+    scored = [(s, n) for n in names if (s := _model_score(n)) is not None]
+    return [n for _, n in sorted(scored, reverse=True)]
+
+
+@st.cache_resource
+def _working_model() -> dict:
+    return {"name": None}
+
+
+def _google_message(resp) -> str:
+    try:
+        return resp.json()["error"]["message"][:200]
+    except Exception:
+        return f"HTTP {resp.status_code}"
+
+
 def _call(prompt: str) -> dict:
     key = secret("GEMINI_API_KEY")
     if not key:
         raise AIError("GEMINI_API_KEY is missing from the app secrets.")
     _spend_budget()
-    model = secret("GEMINI_MODEL", "gemini-2.5-flash")
+
+    remembered = _working_model()
+    candidates = [m for m in (remembered["name"], secret("GEMINI_MODEL")) if m]
+    try:
+        candidates += available_models(key)
+    except Exception:
+        candidates += ["gemini-flash-latest", "gemini-2.5-flash"]
+    candidates = list(dict.fromkeys(candidates))[:5]
+
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"},
     }
-    resp = requests.post(
-        GEMINI_URL.format(model=model),
-        headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-        json=body,
-        timeout=90,
-    )
-    if resp.status_code == 429:
-        raise AIError("Gemini free-tier limit reached. Try again later.")
-    if resp.status_code >= 400:
-        raise AIError(f"Gemini returned an error ({resp.status_code}).")
-    try:
-        parts = resp.json()["candidates"][0]["content"]["parts"]
-        text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
-        text = re.sub(r"^```(?:json)?|```$", "", text.strip()).strip()
-        return json.loads(text)
-    except Exception as exc:
-        raise AIError("The AI answer couldn't be read. Try again in a moment.") from exc
+    last_error = "no model available"
+    for model in candidates:
+        resp = requests.post(
+            GEMINI_URL.format(model=model),
+            headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+            json=body,
+            timeout=90,
+        )
+        if resp.status_code in (400, 403, 404, 429):  # model missing, not allowed on this plan, or over quota
+            last_error = f"{model}: {_google_message(resp)}"
+            if remembered["name"] == model:
+                remembered["name"] = None
+            continue
+        if resp.status_code >= 400:
+            raise AIError(f"Gemini error: {_google_message(resp)}")
+        remembered["name"] = model
+        try:
+            parts = resp.json()["candidates"][0]["content"]["parts"]
+            text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
+            text = re.sub(r"^```(?:json)?|```$", "", text.strip()).strip()
+            return json.loads(text)
+        except Exception as exc:
+            raise AIError("The AI answer couldn't be read. Try again in a moment.") from exc
+    raise AIError(f"Gemini didn't accept the request ({last_error}).")
 
 
 RULES = """STRICT RULES

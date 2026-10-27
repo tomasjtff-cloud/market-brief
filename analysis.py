@@ -42,9 +42,11 @@ def max_drawdown(close: pd.Series, window: int = TRADING_DAYS) -> float | None:
     return float((c / c.cummax() - 1).min())
 
 
-def beta(close: pd.Series, bench_close: pd.Series, window: int = TRADING_DAYS) -> float | None:
-    df = pd.concat([close.pct_change(), bench_close.pct_change()], axis=1, join="inner").dropna().iloc[-window:]
-    if len(df) < 60:
+def beta(close: pd.Series, bench_close: pd.Series, weeks: int = 104) -> float | None:
+    """Two-year beta on weekly (Friday) returns, the usual convention for cost of capital."""
+    weekly = pd.concat([close, bench_close], axis=1, join="inner").resample("W-FRI").last()
+    df = weekly.pct_change().dropna().iloc[-weeks:]
+    if len(df) < 40:
         return None
     var = df.iloc[:, 1].var()
     return float(df.iloc[:, 0].cov(df.iloc[:, 1]) / var) if var > 0 else None
