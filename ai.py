@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import re
+import time
 
 import requests
 import streamlit as st
@@ -44,11 +45,11 @@ SKIP_VARIANTS = ("image", "tts", "audio", "live", "embedding", "vision", "thinki
 
 
 def _model_score(name: str) -> float | None:
-    """Prefer the newest stable Flash model; Pro is usually not on the free tier."""
+    """Prefer the newest stable Flash-Lite/Flash model: fast, and on the free tier. Pro usually isn't."""
     m = MODEL_PATTERN.match(name)
     if not m or any(v in m.group(3) for v in SKIP_VARIANTS):
         return None
-    score = float(m.group(1)) * 10 + {"flash": 3, "flash-lite": 2, "pro": -5}[m.group(2)]
+    score = float(m.group(1)) * 10 + {"flash-lite": 3, "flash": 2, "pro": -5}[m.group(2)]
     if "preview" in m.group(3) or "exp" in m.group(3):
         score -= 4
     return score
@@ -102,13 +103,21 @@ def _call(prompt: str) -> dict:
         "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"},
     }
     last_error = "no model available"
+    print(f"[ai] candidates: {candidates}", flush=True)
     for model in candidates:
-        resp = requests.post(
-            GEMINI_URL.format(model=model),
-            headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-            json=body,
-            timeout=90,
-        )
+        started = time.time()
+        try:
+            resp = requests.post(
+                GEMINI_URL.format(model=model),
+                headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+                json=body,
+                timeout=45,
+            )
+        except requests.Timeout:
+            last_error = f"{model}: timed out"
+            print(f"[ai] {model} timed out", flush=True)
+            continue
+        print(f"[ai] {model} -> {resp.status_code} in {time.time() - started:.1f}s", flush=True)
         if resp.status_code in (400, 403, 404, 429):  # model missing, not allowed on this plan, or over quota
             last_error = f"{model}: {_google_message(resp)}"
             if remembered["name"] == model:
@@ -162,7 +171,7 @@ HEADLINES
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def daily_brief(slot: str, _snapshot: str, _headlines: list[dict]) -> dict:
     """Cached per 6-hour slot (the leading underscore keeps the inputs out of the cache key)."""
-    used = _headlines[:60]
+    used = _headlines[:40]
     lines = [
         f"[{i}] {h['source']} | {h['time']:%a %b %d %H:%M} ET | {h['title']}"
         + (f" — {h['summary'][:300]}" if h.get("summary") else "")

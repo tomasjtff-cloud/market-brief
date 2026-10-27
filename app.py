@@ -265,13 +265,25 @@ def page_today() -> None:
 
     headlines, failed = data.todays_headlines()
     st.html('<h2 class="mb-section">The morning note</h2>')
-    if not headlines:
-        st.info("No headlines from the last day could be loaded. The sources may be down; try again in a few minutes.")
-    else:
+    note_slot = st.container()  # filled last, so the headlines show while the AI writes
+
+    st.html('<h2 class="mb-section">Latest headlines</h2>')
+    st.html('<div class="mb-list">' + "".join(
+        f'<div class="mb-item"><div><a href="{esc(h["url"])}" target="_blank" rel="noopener">{esc(h["title"])}</a></div>'
+        f'<div class="meta">{esc(h["source"])}<br>{h["time"]:%b %d, %-I:%M %p}</div></div>'
+        for h in headlines[:20]
+    ) + "</div>")
+    if failed:
+        st.caption("No answer this time from: " + ", ".join(failed))
+
+    with note_slot:
+        if not headlines:
+            st.info("No headlines from the last day could be loaded. The sources may be down; try again in a few minutes.")
+            return
         snapshot = "\n".join(c["text"] for c in cells if c["text"])
         slot = f"{now:%Y-%m-%d}-{now.hour // 6}"
         try:
-            with st.spinner("Writing today's note…"):
+            with st.spinner("Writing today's note from the latest headlines…"):
                 brief = ai.daily_brief(slot, snapshot, headlines)
             stories = brief["stories"]
             out = f'<p class="mb-lead">{esc(brief["market_summary"])}</p>'
@@ -284,15 +296,6 @@ def page_today() -> None:
             st.html(out)
         except Exception as exc:
             st.warning(f"The AI note couldn't be written this time ({exc}). The latest headlines are below.")
-
-    st.html('<h2 class="mb-section">Latest headlines</h2>')
-    st.html('<div class="mb-list">' + "".join(
-        f'<div class="mb-item"><div><a href="{esc(h["url"])}" target="_blank" rel="noopener">{esc(h["title"])}</a></div>'
-        f'<div class="meta">{esc(h["source"])}<br>{h["time"]:%b %d, %-I:%M %p}</div></div>'
-        for h in headlines[:20]
-    ) + "</div>")
-    if failed:
-        st.caption("No answer this time from: " + ", ".join(failed))
 
 
 # =========================================================================== Watchlist
