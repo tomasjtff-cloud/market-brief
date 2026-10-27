@@ -56,7 +56,7 @@ def _model_score(name: str) -> float | None:
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def available_models(_key: str) -> list[str]:
+def ranked_models(_key: str) -> list[str]:
     """Ask Google which models this key can use, best first."""
     resp = requests.get(
         "https://generativelanguage.googleapis.com/v1beta/models",
@@ -74,7 +74,26 @@ def available_models(_key: str) -> list[str]:
 
 @st.cache_resource
 def _working_model() -> dict:
-    return {"name": None}
+    return {"name": None, "thinking": True}
+
+
+def _thinking_config(model: str) -> dict:
+    """Keep 'thinking' to a minimum: these are summaries, and thinking makes Flash models very slow."""
+    m = MODEL_PATTERN.match(model)
+    version = float(m.group(1)) if m else 0
+    return {"thinkingBudget": 0} if version < 3 else {"thinkingLevel": "low"}
+
+
+def _post(key: str, model: str, prompt: str, thinking: bool):
+    config = {"temperature": 0.2, "responseMimeType": "application/json"}
+    if thinking:
+        config["thinkingConfig"] = _thinking_config(model)
+    return requests.post(
+        GEMINI_URL.format(model=model),
+        headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+        json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": config},
+        timeout=40,
+    )
 
 
 def _google_message(resp) -> str:
@@ -93,29 +112,24 @@ def _call(prompt: str) -> dict:
     remembered = _working_model()
     candidates = [m for m in (remembered["name"], secret("GEMINI_MODEL")) if m]
     try:
-        candidates += available_models(key)
+        candidates += ranked_models(key)
     except Exception:
         candidates += ["gemini-flash-latest", "gemini-2.5-flash"]
     candidates = list(dict.fromkeys(candidates))[:5]
 
-    body = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"},
-    }
     last_error = "no model available"
     print(f"[ai] candidates: {candidates}", flush=True)
     for model in candidates:
         started = time.time()
         try:
-            resp = requests.post(
-                GEMINI_URL.format(model=model),
-                headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-                json=body,
-                timeout=45,
-            )
+            resp = _post(key, model, prompt, thinking=True)
+            if resp.status_code == 400 and "thinking" in _google_message(resp).lower():
+                resp = _post(key, model, prompt, thinking=False)  # this model doesn't take the thinking setting
         except requests.Timeout:
             last_error = f"{model}: timed out"
             print(f"[ai] {model} timed out", flush=True)
+            if remembered["name"] == model:
+                remembered["name"] = None
             continue
         print(f"[ai] {model} -> {resp.status_code} in {time.time() - started:.1f}s", flush=True)
         if resp.status_code in (400, 403, 404, 429):  # model missing, not allowed on this plan, or over quota
