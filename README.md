@@ -1,16 +1,18 @@
 # Market Brief
 
-A personal markets dashboard built in Python. It gives a daily AI-written market brief, a five-stock watchlist, and a one-page analysis for each stock with risk metrics and a discounted cash flow (DCF) valuation that compares intrinsic value with the market price.
+A free markets terminal built in Python, styled after Yahoo Finance and Finviz. It covers the US market with Mexico and Argentina on the side: a scrolling ticker tape, a Finviz-style market map, a screener-style watchlist, stock comparison, and a full quote page per stock with financials, a DCF valuation, a 4,000-scenario outlook and an AI-written analysis.
 
-Everything runs on free data sources and free hosting.
+Everything runs on free data sources and free hosting, and works on a phone.
 
 ## What it does
 
 | Page | Content |
 |---|---|
-| **Today** | Market board for the US (S&P 500, Nasdaq 100, Dow, Russell 2000 via ETFs, gold, oil, Bitcoin, 10-year Treasury) and for Mexico and Argentina (EWW, ARGT, USD/MXN, official, MEP and blue dollar), an AI-written brief of the day's most important stories with links to the sources, and the latest headlines |
-| **Watchlist** | Up to five stocks chosen from a search box, with price, daily change, a 6-month chart, returns, volatility and the next earnings date |
-| **Stock analysis** | Price chart with a volatility-based range, returns and risk metrics (volatility, max drawdown, beta, Sharpe), reported fundamentals, an interactive DCF with scenarios, a football-field chart of valuation ranges, a sensitivity table and a reverse DCF, company news, and an AI-written take |
+| **Markets** | Index cards with day ranges, sector performance (SPDR ETFs), the US Treasury yield curve vs a month ago with 10Y−2Y and 10Y−3M spreads, Mexico and Argentina (EWW, ARGT, USD/MXN, official, MEP and blue dollar), watchlist rail with sparklines, upcoming earnings, an AI morning note with sources and the latest headlines |
+| **Map** | The 25 largest US companies as a treemap sized by market value and colored by today's move, plus top gainers, decliners and sectors |
+| **Watchlist** | Up to eight stocks in one table: price, returns (1D to 1Y), volatility, beta, max drawdown, 52-week range, 6-month sparkline, P/E, market cap, DCF value, upside and next earnings |
+| **Compare** | Up to six stocks rebased to 100 against SPY and an equal-weight portfolio, with return, volatility, Sharpe, drawdown, beta and a correlation heatmap |
+| **Stock** | Quote header and key stats; **Summary** (chart 1D to 5Y, key statistics, performance vs S&P 500, analyst ratings, key levels, profile); **Chart** (area or candles, 50/200-day averages, Bollinger bands, RSI, ±1σ range ahead, drawdown); **Financials** (six years from 10-K filings, margins); **Valuation** (interactive DCF, bear/bull, reverse DCF, football field, sensitivity, multiples); **Outlook** (4,000 bootstrap scenarios over 6 months, fan chart, scenario table at 1/3/6 months, probabilities, trend assumption); **Compare**; **News**; **AI analysis** |
 | **Methodology** | How every number is calculated and where it comes from |
 
 ## Methodology
@@ -23,6 +25,8 @@ Everything runs on free data sources and free hosting.
 
 **Scenarios, sensitivity and football field.** Bear and bull cases move growth by ±5 points and the discount rate by ±1 point. A sensitivity table shows value per share across discount rates and terminal growth rates. A football-field chart puts the DCF scenario range, the sensitivity range, the 52-week trading range and the 3-month statistical range on one axis against the market price.
 
+**Outlook.** 4,000 six-month paths built by resampling the stock's real daily moves from the last two years (bootstrap), so fat tails and crash days keep their real frequency. The average move is replaced by the chosen trend: none, the market average (+8% a year) or the recent trend capped at ±30% a year. The app reports percentiles at 1, 3 and 6 months and the share of paths that end higher, fall 20% at some point, reach the 52-week high or touch the DCF value. These are model probabilities, not forecasts.
+
 **Reverse DCF.** Solves (by bisection) for the five-year growth rate that makes intrinsic value equal the current price, which shows what the market is already pricing in.
 
 **AI guardrails.** Google Gemini writes the brief and the per-stock take. It only receives the headlines and numbers shown in the app and is instructed not to add facts, give recommendations or set price targets. Every story links back to its sources, and output is cached to stay within the free quota.
@@ -31,10 +35,10 @@ Everything runs on free data sources and free hosting.
 
 | Data | Source |
 |---|---|
-| Quotes, company news, earnings dates, symbol search | Finnhub (free tier) |
-| Daily price history, USD/MXN | Twelve Data (free tier) |
+| Quotes, company profile, key metrics, analyst ratings, company news, earnings dates, symbol search | Finnhub (free tier) |
+| Daily and intraday price history, USD/MXN | Twelve Data (free tier) |
 | Financial statements | SEC EDGAR XBRL company facts |
-| 10-year Treasury yield | FRED, Federal Reserve Bank of St. Louis |
+| Treasury yield curve | FRED, Federal Reserve Bank of St. Louis |
 | Bitcoin | CoinGecko |
 | Argentine dollar rates (official, MEP, blue) | DolarApi |
 | Headlines | CNBC, MarketWatch, WSJ Markets and Federal Reserve RSS feeds |
@@ -44,10 +48,14 @@ Everything runs on free data sources and free hosting.
 Python, Streamlit, pandas, NumPy, Plotly, feedparser, Google Gemini API. Hosted on Streamlit Community Cloud. Finance math is unit-tested (`tests/test_analysis.py`).
 
 ```
-app.py            pages and charts
-data.py           all external data sources, with caching
+app.py            router: top bar, ticker tape, pages
+common.py         navigation, watchlist state, formatting, top bar and ticker tape
+views_market.py   Markets, Map, Watchlist, Compare and Methodology pages
+views_stock.py    the stock quote page and its sections
+charts.py         Plotly charts (price, fan, treemap, yield curve, football field…)
+data.py           all external data sources, with caching and rate limiting
 fundamentals.py   SEC XBRL parsing into revenue, FCF, cash, debt, shares
-analysis.py       risk metrics, statistical range, WACC, DCF, reverse DCF
+analysis.py       risk metrics, WACC, DCF, reverse DCF, bootstrap outlook, portfolio math
 ai.py             daily brief and stock take (Gemini, picks an available model automatically)
 ui.py             styles and HTML building blocks
 ```

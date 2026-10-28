@@ -21,6 +21,9 @@ REVENUE = [
     "RevenueFromContractWithCustomerIncludingAssessedTax",
 ]
 NET_INCOME = ["NetIncomeLoss", "ProfitLoss"]
+GROSS_PROFIT = ["GrossProfit"]
+COST_OF_REVENUE = ["CostOfRevenue", "CostOfGoodsAndServicesSold", "CostOfGoodsSold"]
+OPERATING_INCOME = ["OperatingIncomeLoss"]
 OPERATING_CF = [
     "NetCashProvidedByUsedInOperatingActivities",
     "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
@@ -100,6 +103,12 @@ def build(facts: dict) -> dict:
 
     revenue = annual_series(facts, REVENUE)
     net_income = annual_series(facts, NET_INCOME)
+    operating_income = annual_series(facts, OPERATING_INCOME)
+    gross_profit = annual_series(facts, GROSS_PROFIT)
+    if gross_profit.empty and not revenue.empty:
+        cost = annual_series(facts, COST_OF_REVENUE)
+        if not cost.empty:
+            gross_profit = (revenue - cost.reindex(revenue.index)).dropna()
     ocf = annual_series(facts, OPERATING_CF)
     capex = annual_series(facts, CAPEX)
     eps = annual_series(facts, EPS_DILUTED, unit="USD/shares")
@@ -146,6 +155,8 @@ def build(facts: dict) -> dict:
         "name": facts.get("entityName", ""),
         "revenue": keep(revenue),
         "net_income": keep(net_income),
+        "gross_profit": keep(gross_profit),
+        "operating_income": keep(operating_income),
         "ocf": keep(ocf),
         "capex": keep(capex),
         "fcf": keep(fcf),

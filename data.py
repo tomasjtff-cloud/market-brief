@@ -15,6 +15,9 @@ from __future__ import annotations
 import datetime as dt
 import html
 import re
+import threading
+import time
+from collections import deque
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
 
@@ -52,6 +55,30 @@ def _get_bytes(url: str, headers: dict | None = None) -> bytes:
     return resp.content
 
 
+# --------------------------------------------------------------------------- rate limiting
+@st.cache_resource
+def _limiter(name: str) -> dict:
+    return {"lock": threading.Lock(), "calls": deque()}
+
+
+def _throttle(name: str, per_minute: int, max_wait: float) -> None:
+    """Shared sliding-window limiter so the whole app stays inside each free plan's per-minute cap."""
+    lim = _limiter(name)
+    deadline = time.time() + max_wait
+    while True:
+        with lim["lock"]:
+            now = time.time()
+            while lim["calls"] and now - lim["calls"][0] > 60:
+                lim["calls"].popleft()
+            if len(lim["calls"]) < per_minute:
+                lim["calls"].append(now)
+                return
+            wait = 60.5 - (now - lim["calls"][0])
+        if time.time() + wait > deadline:
+            raise DataError(f"{name} is busy (free plan limit per minute). Refresh in a minute.")
+        time.sleep(min(wait, 2.0))
+
+
 # --------------------------------------------------------------------------- Finnhub
 FINNHUB = "https://finnhub.io/api/v1"
 
@@ -60,6 +87,7 @@ def _finnhub(path: str, **params):
     key = secret("FINNHUB_API_KEY")
     if not key:
         raise DataError("FINNHUB_API_KEY is missing from the app secrets.")
+    _throttle("Finnhub", 55, max_wait=40)
     params["token"] = key
     return _get_json(f"{FINNHUB}{path}", params=params)
 
@@ -93,7 +121,25 @@ def profile(symbol: str) -> dict:
         "industry": p.get("finnhubIndustry") or "",
         "logo": p.get("logo") or "",
         "web": p.get("weburl") or "",
+        "country": p.get("country") or "",
+        "exchange": p.get("exchange") or "",
+        "ipo": p.get("ipo") or "",
+        "market_cap": (p.get("marketCapitalization") or 0) * 1e6 or None,
+        "shares": (p.get("shareOutstanding") or 0) * 1e6 or None,
     }
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def basic_metrics(symbol: str) -> dict:
+    """Finnhub 'basic financials': 52-week range, P/E, EPS, dividend yield, average volume..."""
+    return (_finnhub("/stock/metric", symbol=symbol, metric="all") or {}).get("metric") or {}
+
+
+@st.cache_data(ttl=12 * 3600, show_spinner=False)
+def recommendations(symbol: str) -> list[dict]:
+    """Monthly counts of sell-side analyst ratings (strong buy ... strong sell), newest first."""
+    rows = _finnhub("/stock/recommendation", symbol=symbol) or []
+    return sorted(rows, key=lambda r: r.get("period", ""), reverse=True)[:6]
 
 
 US_SYMBOL = re.compile(r"^[A-Z]{1,5}(\.[A-Z])?$")
@@ -177,6 +223,7 @@ def _twelve(path: str, **params):
     key = secret("TWELVE_DATA_API_KEY")
     if not key:
         raise DataError("TWELVE_DATA_API_KEY is missing from the app secrets.")
+    _throttle("Twelve Data", 8, max_wait=25)
     params["apikey"] = key
     data = _get_json(f"{TWELVE}{path}", params=params)
     if isinstance(data, dict) and data.get("status") == "error":
@@ -186,13 +233,7 @@ def _twelve(path: str, **params):
     return data
 
 
-@st.cache_data(ttl=6 * 3600, show_spinner=False)
-def history(symbol: str, outputsize: int = 520) -> pd.DataFrame:
-    """Daily OHLCV, oldest first. 520 trading days is a bit over two years."""
-    data = _twelve("/time_series", symbol=symbol, interval="1day", outputsize=outputsize)
-    values = data.get("values") or []
-    if not values:
-        raise DataError(f"No price history for {symbol}.")
+def _frame(values: list[dict]) -> pd.DataFrame:
     df = pd.DataFrame(values)
     df["datetime"] = pd.to_datetime(df["datetime"])
     df = df.set_index("datetime").sort_index()
@@ -200,6 +241,26 @@ def history(symbol: str, outputsize: int = 520) -> pd.DataFrame:
         if col in df:
             df[col] = pd.to_numeric(df[col], errors="coerce")
     return df.dropna(subset=["close"])
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def history(symbol: str, outputsize: int = 1300) -> pd.DataFrame:
+    """Daily OHLCV, oldest first. 1,300 trading days is about five years."""
+    data = _twelve("/time_series", symbol=symbol, interval="1day", outputsize=outputsize)
+    values = data.get("values") or []
+    if not values:
+        raise DataError(f"No price history for {symbol}.")
+    return _frame(values)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def intraday(symbol: str, interval: str = "5min", outputsize: int = 80) -> pd.DataFrame:
+    """Intraday bars (exchange time) for the 1D and 5D charts."""
+    data = _twelve("/time_series", symbol=symbol, interval=interval, outputsize=outputsize)
+    values = data.get("values") or []
+    if not values:
+        raise DataError(f"No intraday data for {symbol}.")
+    return _frame(values)
 
 
 @st.cache_data(ttl=900, show_spinner=False)
@@ -258,18 +319,45 @@ def dolares_ar() -> dict:
 
 # --------------------------------------------------------------------------- FRED
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
-def fred_latest(series_id: str = "DGS10") -> dict:
+def fred_series(series_id: str, limit: int = 40) -> list[tuple[str, float]]:
+    """Most recent observations, newest first, skipping missing days."""
     key = secret("FRED_API_KEY")
     if not key:
         raise DataError("FRED_API_KEY is missing from the app secrets.")
     d = _get_json(
         "https://api.stlouisfed.org/fred/series/observations",
-        params={"series_id": series_id, "api_key": key, "file_type": "json", "sort_order": "desc", "limit": 15},
+        params={"series_id": series_id, "api_key": key, "file_type": "json", "sort_order": "desc", "limit": limit},
     )
-    obs = [o for o in d.get("observations", []) if o.get("value") not in (".", "", None)]
+    obs = [(o["date"], float(o["value"])) for o in d.get("observations", []) if o.get("value") not in (".", "", None)]
     if len(obs) < 2:
         raise DataError(f"No recent data for {series_id}.")
-    return {"value": float(obs[0]["value"]), "prev": float(obs[1]["value"]), "date": obs[0]["date"]}
+    return obs
+
+
+def fred_latest(series_id: str = "DGS10") -> dict:
+    obs = fred_series(series_id)
+    return {"value": obs[0][1], "prev": obs[1][1], "date": obs[0][0]}
+
+
+CURVE = [("1M", "DGS1MO", 1 / 12), ("3M", "DGS3MO", 0.25), ("6M", "DGS6MO", 0.5), ("1Y", "DGS1", 1),
+         ("2Y", "DGS2", 2), ("3Y", "DGS3", 3), ("5Y", "DGS5", 5), ("7Y", "DGS7", 7), ("10Y", "DGS10", 10),
+         ("20Y", "DGS20", 20), ("30Y", "DGS30", 30)]
+
+
+def yield_curve() -> pd.DataFrame:
+    """US Treasury curve today and about one month earlier."""
+    rows = []
+    for label, sid, years in CURVE:
+        try:
+            obs = fred_series(sid)
+        except Exception:
+            continue
+        latest_date = dt.date.fromisoformat(obs[0][0])
+        month_ago = next((v for d, v in obs if dt.date.fromisoformat(d) <= latest_date - dt.timedelta(days=28)), None)
+        rows.append({"tenor": label, "years": years, "now": obs[0][1], "month_ago": month_ago, "date": obs[0][0]})
+    if not rows:
+        raise DataError("Treasury yields unavailable.")
+    return pd.DataFrame(rows)
 
 
 def risk_free_rate() -> tuple[float, str]:
@@ -361,7 +449,6 @@ def sec_cik_map() -> dict:
     return {v["ticker"].upper(): int(v["cik_str"]) for v in d.values()}
 
 
-@st.cache_data(ttl=86400, show_spinner=False, max_entries=20)
 def sec_facts(ticker: str) -> dict:
     cik = sec_cik_map().get(ticker.upper().replace(".", "-"))
     if not cik:
@@ -369,3 +456,27 @@ def sec_facts(ticker: str) -> dict:
             f"{ticker} is not in the SEC database. Valuation works for US-listed companies that file 10-Ks."
         )
     return _get_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json", headers=_sec_headers())
+
+
+@st.cache_data(ttl=86400, show_spinner=False, max_entries=60)
+def company_fundamentals(ticker: str) -> dict:
+    """Parsed SEC financials (small), cached instead of the multi-megabyte raw filing data."""
+    import fundamentals
+
+    return fundamentals.build(sec_facts(ticker))
+
+
+# --------------------------------------------------------------------------- universes
+SECTOR_ETFS = [("Technology", "XLK"), ("Financials", "XLF"), ("Health care", "XLV"), ("Consumer discretionary", "XLY"),
+               ("Communication services", "XLC"), ("Industrials", "XLI"), ("Consumer staples", "XLP"),
+               ("Energy", "XLE"), ("Utilities", "XLU"), ("Real estate", "XLRE"), ("Materials", "XLB")]
+
+MEGA_CAPS = [
+    ("AAPL", "Technology"), ("MSFT", "Technology"), ("NVDA", "Technology"), ("AVGO", "Technology"),
+    ("ORCL", "Technology"), ("AMD", "Technology"), ("GOOGL", "Communication services"),
+    ("META", "Communication services"), ("NFLX", "Communication services"), ("AMZN", "Consumer discretionary"),
+    ("TSLA", "Consumer discretionary"), ("HD", "Consumer discretionary"), ("JPM", "Financials"),
+    ("V", "Financials"), ("MA", "Financials"), ("BAC", "Financials"), ("LLY", "Health care"),
+    ("UNH", "Health care"), ("JNJ", "Health care"), ("ABBV", "Health care"), ("WMT", "Consumer staples"),
+    ("COST", "Consumer staples"), ("PG", "Consumer staples"), ("XOM", "Energy"), ("CVX", "Energy"),
+]

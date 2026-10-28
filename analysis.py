@@ -227,3 +227,60 @@ def default_valuation(f: dict, price: float, beta_: float | None, rf: float,
         return None
     label, gap = verdict(r.per_share, price)
     return {"per_share": r.per_share, "gap": gap, "label": label, "growth": growth, "wacc": w["wacc"]}
+
+
+# --------------------------------------------------------------------------- outlook (bootstrap simulation)
+DRIFT_CHOICES = {
+    "neutral": "No trend: past moves with their average removed",
+    "market": "Market average: about +8% a year",
+    "trend": "Recent trend: last two years' average, capped at ±30% a year",
+}
+OUTLOOK_PERCENTILES = (5, 25, 50, 75, 95)
+OUTLOOK_LABELS = ("Bad", "Weak", "Middle", "Good", "Very good")
+
+
+def bootstrap_paths(close: pd.Series, days: int = 126, n: int = 4000, drift: str = "neutral",
+                    lookback: int = 504, seed: int = 7) -> np.ndarray | None:
+    """Simulated price paths (n × days). Each simulated day replays a real daily move from the last
+    `lookback` trading days, so fat tails and crash days are kept; only the average drift is set."""
+    r = np.log(close).diff().dropna().iloc[-lookback:].to_numpy()
+    if len(r) < 120:
+        return None
+    mean = r.mean()
+    if drift == "market":
+        target = np.log(1.08) / TRADING_DAYS
+    elif drift == "trend":
+        target = float(np.clip(mean, np.log(0.70) / TRADING_DAYS, np.log(1.30) / TRADING_DAYS))
+    else:
+        target = 0.0
+    shocks = r - mean + target
+    rng = np.random.default_rng(seed)
+    picks = shocks[rng.integers(0, len(shocks), size=(n, days))]
+    return float(close.iloc[-1]) * np.exp(np.cumsum(picks, axis=1))
+
+
+def outlook_summary(paths: np.ndarray, price: float, high_52w: float | None = None,
+                    target: float | None = None) -> dict:
+    horizons = {"1 month": 21, "3 months": 63, "6 months": min(126, paths.shape[1])}
+    table = {h: np.percentile(paths[:, d - 1], OUTLOOK_PERCENTILES) for h, d in horizons.items()}
+    final, low, high = paths[:, -1], paths.min(axis=1), paths.max(axis=1)
+    probs = {
+        "finish_up": float((final > price).mean()),
+        "drop_20": float((low <= price * 0.8).mean()),
+        "touch_high": None if not high_52w else (1.0 if high_52w <= price else float((high >= high_52w).mean())),
+        "touch_target": None if not target else float(((high >= target) if target > price else (low <= target)).mean()),
+    }
+    fan = np.percentile(paths, OUTLOOK_PERCENTILES, axis=0)
+    return {"table": table, "probs": probs, "fan": fan}
+
+
+# --------------------------------------------------------------------------- comparison
+def aligned_returns(closes: dict[str, pd.Series], days: int = TRADING_DAYS) -> pd.DataFrame:
+    df = pd.DataFrame(closes).dropna(how="any").iloc[-(days + 1):]
+    return df.pct_change().dropna()
+
+
+def equal_weight_index(closes: dict[str, pd.Series], days: int) -> pd.Series:
+    """Equal-weight, daily-rebalanced portfolio, rebased to 1."""
+    rets = aligned_returns(closes, days)
+    return (1 + rets.mean(axis=1)).cumprod()

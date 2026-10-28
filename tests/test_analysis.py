@@ -110,3 +110,26 @@ def test_fundamentals_from_sec_facts():
     assert f["shares"] == 1000  # two share classes summed from the latest filing
     assert f["debt"] == 50 and f["cash"] == 20 and f["net_debt"] == 30
     assert fundamentals.revenue_cagr(f["revenue"].loc[2022:]) == pytest.approx(0.10)
+
+
+def test_bootstrap_outlook():
+    close = _prices(n=600, seed=3)
+    paths = analysis.bootstrap_paths(close, days=126, n=2000, drift="neutral", seed=1)
+    assert paths.shape == (2000, 126)
+    again = analysis.bootstrap_paths(close, days=126, n=2000, drift="neutral", seed=1)
+    assert np.allclose(paths, again)  # reproducible
+    price = float(close.iloc[-1])
+    out = analysis.outlook_summary(paths, price, high_52w=price * 1.2, target=price * 0.9)
+    lo, med, hi = out["table"]["6 months"][[0, 2, 4]]
+    assert lo < med < hi
+    assert abs(np.log(np.median(paths[:, -1]) / price)) < 0.05  # no drift: median near today
+    for v in out["probs"].values():
+        assert 0 <= v <= 1
+    up = analysis.bootstrap_paths(close, days=126, n=2000, drift="market", seed=1)
+    assert np.median(up[:, -1]) > np.median(paths[:, -1])
+
+
+def test_equal_weight_index():
+    a, b = _prices(seed=4), _prices(seed=5)
+    idx = analysis.equal_weight_index({"A": a, "B": b}, 100)
+    assert len(idx) == 100 and idx.iloc[0] > 0
