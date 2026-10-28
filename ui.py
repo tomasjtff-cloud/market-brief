@@ -77,6 +77,10 @@ a {{ color: var(--accent); }}
   min-height: 2rem; padding: 0 0.4rem; }}
 [data-testid="stSidebar"] [class*="st-key-rm_"] button:hover {{ color: #FFB4AC; background: transparent; }}
 
+[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {{ flex-wrap: nowrap !important; gap: 0.3rem; }}
+[data-testid="stSidebar"] [data-testid="stColumn"] {{ min-width: 0 !important; width: auto !important; }}
+[data-testid="stSidebar"] [data-testid="stColumn"]:last-child {{ flex: 0 0 2.4rem !important; }}
+
 /* masthead */
 .mb-mast {{ display: flex; justify-content: space-between; align-items: flex-end; gap: 1.2rem; flex-wrap: wrap;
   padding-bottom: 1rem; border-bottom: 1px solid var(--line); margin-bottom: 1.2rem; }}
