@@ -315,7 +315,7 @@ def page_today(wl: list[str]) -> None:
     st.html(f'<div class="mb-mast"><div><h1 class="mb-date">{now:%A, %B %-d}</h1>'
             f'<div class="mb-dek">{status_line()}</div></div><div class="mb-clocks">{clocks}</div></div>')
 
-    main, rail = st.columns([2.6, 1], gap="large")
+    main, rail = st.columns([2.3, 1], gap="large")
     with rail:
         render_rail(wl)
     with main:

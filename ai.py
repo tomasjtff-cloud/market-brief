@@ -49,14 +49,15 @@ def _model_score(name: str) -> float | None:
     m = MODEL_PATTERN.match(name)
     if not m or any(v in m.group(3) for v in SKIP_VARIANTS):
         return None
-    score = float(m.group(1)) * 10 + {"flash-lite": 3, "flash": 2, "pro": -5}[m.group(2)]
+    # Kind first (Flash-Lite is the fastest and most available on the free tier), then the newest version.
+    score = {"flash-lite": 200, "flash": 100, "pro": 0}[m.group(2)] + float(m.group(1))
     if "preview" in m.group(3) or "exp" in m.group(3):
-        score -= 4
+        score -= 50
     return score
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def ranked_models(_key: str) -> list[str]:
+def model_ranking(_key: str) -> list[str]:
     """Ask Google which models this key can use, best first."""
     resp = requests.get(
         "https://generativelanguage.googleapis.com/v1beta/models",
@@ -74,7 +75,7 @@ def ranked_models(_key: str) -> list[str]:
 
 @st.cache_resource
 def _working_model() -> dict:
-    return {"name": None, "thinking": True}
+    return {"name": None, "pause_until": 0.0}
 
 
 def _thinking_config(model: str) -> dict:
@@ -92,7 +93,7 @@ def _post(key: str, model: str, prompt: str, thinking: bool):
         GEMINI_URL.format(model=model),
         headers={"x-goog-api-key": key, "Content-Type": "application/json"},
         json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": config},
-        timeout=40,
+        timeout=25,
     )
 
 
@@ -107,12 +108,15 @@ def _call(prompt: str) -> dict:
     key = secret("GEMINI_API_KEY")
     if not key:
         raise AIError("GEMINI_API_KEY is missing from the app secrets.")
+    remembered = _working_model()
+    if time.time() < remembered["pause_until"]:
+        wait = int((remembered["pause_until"] - time.time()) / 60) + 1
+        raise AIError(f"Gemini was unavailable a moment ago; the app will try again in about {wait} min")
     _spend_budget()
 
-    remembered = _working_model()
     candidates = [m for m in (remembered["name"], secret("GEMINI_MODEL")) if m]
     try:
-        candidates += ranked_models(key)
+        candidates += model_ranking(key)
     except Exception:
         candidates += ["gemini-flash-latest", "gemini-2.5-flash"]
     candidates = list(dict.fromkeys(candidates))[:5]
@@ -132,13 +136,11 @@ def _call(prompt: str) -> dict:
                 remembered["name"] = None
             continue
         print(f"[ai] {model} -> {resp.status_code} in {time.time() - started:.1f}s", flush=True)
-        if resp.status_code in (400, 403, 404, 429):  # model missing, not allowed on this plan, or over quota
+        if resp.status_code in (400, 403, 404, 429) or resp.status_code >= 500:  # missing, not allowed, over quota or overloaded
             last_error = f"{model}: {_google_message(resp)}"
             if remembered["name"] == model:
                 remembered["name"] = None
             continue
-        if resp.status_code >= 400:
-            raise AIError(f"Gemini error: {_google_message(resp)}")
         remembered["name"] = model
         try:
             parts = resp.json()["candidates"][0]["content"]["parts"]
@@ -147,6 +149,7 @@ def _call(prompt: str) -> dict:
             return json.loads(text)
         except Exception as exc:
             raise AIError("The AI answer couldn't be read. Try again in a moment.") from exc
+    remembered["pause_until"] = time.time() + 600  # don't make every visitor wait on a failing service
     raise AIError(f"Gemini didn't accept the request ({last_error}).")
 
 
