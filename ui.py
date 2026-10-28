@@ -63,6 +63,11 @@ html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-seri
 [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"] {{ display: none !important; }}
 [data-testid="stHeader"] {{ background: transparent; height: 0; }}
 [data-testid="stToolbar"] {{ top: 6px; right: 8px; }}
+/* Streamlit's header/toolbar is a full-width transparent layer above the page: let clicks pass through it
+   (only its own buttons stay clickable), otherwise it blocks the top bar menu. */
+[data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stToolbar"] > div {{ pointer-events: none !important; }}
+[data-testid="stToolbar"] button, [data-testid="stToolbar"] a, [data-testid="stToolbarActions"],
+[data-testid="stToolbarActions"] *, [data-testid="stMainMenu"], [data-testid="stMainMenu"] * {{ pointer-events: auto !important; }}
 [data-testid="stMainBlockContainer"] {{ max-width: 1400px; padding: 0 1.4rem 3rem; }}
 .num {{ font-variant-numeric: tabular-nums; }}
 a {{ color: var(--accent); }}
