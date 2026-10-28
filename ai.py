@@ -386,6 +386,8 @@ STRICT RULES
   consensus or news). One bad headline is not enough.
 - For each item explain: what you propose, why, which data support it, how the risk changes (use the computed
   before/after numbers given), and the downsides or uncertainties.
+- Compare numbers carefully and use the yes/no flags given (for example "above the one-company cap") instead of
+  re-deriving them. "Volatility if moved to target" changes only that position, with cash absorbing the difference.
 - Plain, precise language for a finance graduate. This is a model opinion, not investment advice.
 {language}
 
