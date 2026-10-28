@@ -550,7 +550,8 @@ ES.update({
 ES.update({
     "Loading comparable companies…": "Cargando empresas comparables…", "Comparable companies": "Empresas comparables",
     "No comparable companies available for {t}.": "No hay empresas comparables disponibles para {t}.",
-    "Peer median": "Mediana de pares", "Peer multiples (P/E, EV/EBITDA, P/S)": "Múltiplos de pares (P/U, EV/EBITDA, P/V)",
+    "Peer median": "Mediana de pares",
+    "Peer group (Finnhub's suggestion; add or remove tickers as an analyst would)": "Grupo de pares (sugerido por Finnhub; agregá o quitá tickers como haría un analista)", "Peer multiples (P/E, EV/EBITDA, P/S)": "Múltiplos de pares (P/U, EV/EBITDA, P/V)",
     "P/E": "P/U", "P/S": "P/V", "P/B": "P/VL", "P/FCF": "P/FCF", "EV/EBITDA": "EV/EBITDA", "ROE": "ROE",
     "Peers are the companies Finnhub groups in the same industry; multiples are trailing twelve months. Implied value = today's price × peer median ÷ this company's multiple: what the stock would be worth on its peers' valuation. Peers are rarely perfect matches, so read it next to the DCF, not instead of it.":
         "Los pares son las empresas que Finnhub agrupa en la misma industria; los múltiplos son de los últimos doce meses. Valor implícito = precio de hoy × mediana de pares ÷ múltiplo de esta empresa: lo que valdría la acción con la valuación de sus pares. Los pares casi nunca son idénticos, así que leelo junto al DCF, no en su lugar.",

@@ -335,7 +335,7 @@ def peer_implied(own: dict, peer_mets: list[dict], price: float) -> dict[str, di
     for label, keys in COMP_MULTIPLES.items():
         vals = [v for v in (metric_value(m, keys, positive=True) for m in peer_mets) if v is not None and v < 500]
         mine = metric_value(own, keys, positive=True)
-        if len(vals) >= 2:
+        if len(vals) >= 3:  # a median of one or two peers says little
             med = float(np.median(vals))
             out[label] = {"median": med, "own": mine, "n": len(vals),
                           "implied": price * med / mine if mine else None}

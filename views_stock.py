@@ -406,9 +406,16 @@ def valuation(c: dict) -> dict | None:
 
 
 # =========================================================================== comparable companies
+def peer_list(t: str) -> list[str]:
+    key = f"peers_{t}"
+    if key not in st.session_state:
+        st.session_state[key] = (safe(data.peers, t, default=[]) or [])[:7]
+    return [x for x in st.session_state[key] if x != t]
+
+
 def peer_comps(t: str, price: float, own: dict) -> tuple[list[dict], dict]:
     rows = []
-    for x in (safe(data.peers, t, default=[]) or [])[:7]:
+    for x in peer_list(t)[:10]:
         met = safe(data.basic_metrics, x, default={}) or {}
         if not met:
             continue
@@ -426,6 +433,10 @@ def peer_ff_row(implied: dict) -> list[tuple[str, float, float]]:
 def comps_block(c: dict, comps: list[dict], implied: dict) -> None:
     t, price = c["t"], c["q"]["price"]
     st.html(f'<div class="mb-sec">{T("Comparable companies")} {src("mkt")} {src("calc")}</div>')
+    suggested = (safe(data.peers, t, default=[]) or [])[:12]
+    options = list(dict.fromkeys(suggested + st.session_state.get(f"peers_{t}", []) + [x for x, _ in data.MEGA_CAPS if x != t]))
+    st.multiselect(T("Peer group (Finnhub's suggestion; add or remove tickers as an analyst would)"), options, key=f"peers_{t}",
+                   max_selections=10, accept_new_options=True)
     if not comps:
         st.caption(T("No comparable companies available for {t}.", t=t))
         return
