@@ -217,6 +217,15 @@ def daily_brief(slot: str, _snapshot: str, _headlines: list[dict]) -> dict:
 
 
 # --------------------------------------------------------------------------- stock take
+STOCK_RULES = """STRICT RULES
+- Use ONLY the facts in the data below. Do not add facts, numbers, quotes, dates or events that are not there.
+- If something is unclear, say so briefly or leave it out.
+- You must give a lean of Buy, Hold or Sell. It is a model opinion based only on this data, weighing valuation
+  (DCF and reverse DCF), growth, risk, momentum and news. Do not just copy the Wall Street consensus: form your own
+  view from the data, then compare it with the consensus. No price targets of your own.
+- Plain, precise English for a finance graduate: explain any jargon in a few words.
+- Never present old information as new; respect the timestamps given."""
+
 STOCK_PROMPT = """You are an equity analyst at an asset manager writing a one-page view on {ticker} ({name}).
 
 {rules}
@@ -233,7 +242,11 @@ Return JSON exactly in this shape:
   "bull_case": "1-2 sentences", "base_case": "1-2 sentences", "bear_case": "1-2 sentences",
   "risks": ["3-5 short items"],
   "catalysts": ["2-4 short items"],
-  "conclusion": "2-3 sentences, balanced, no recommendation"}}
+  "lean": "Buy" or "Hold" or "Sell",
+  "conviction": "Low" or "Medium" or "High",
+  "lean_reason": "2-3 sentences: the main reasons for the lean, citing the data",
+  "vs_consensus": "1-2 sentences comparing your lean with the Wall Street consensus in the data and why they differ or agree",
+  "conclusion": "2-3 sentences, balanced"}}
 
 DATA (as of {now})
 {data}
@@ -244,16 +257,20 @@ RECENT NEWS
 
 
 @st.cache_data(ttl=12 * 3600, show_spinner=False)
-def stock_take(ticker: str, name: str, day: str, _data_text: str, _news: list[dict]) -> dict:
+def stock_take(ticker: str, name: str, day: str, assumptions: str, _data_text: str, _news: list[dict]) -> dict:
     news_lines = [
         f"- {n['time']:%b %d} | {n['source']} | {n['title']}" + (f" — {n['summary'][:250]}" if n.get("summary") else "")
         for n in _news[:12] if n.get("time")
     ] or ["- No company news in the last 7 days."]
     now = dt.datetime.now(ET)
     prompt = STOCK_PROMPT.format(
-        ticker=ticker, name=name, rules=RULES, now=f"{now:%Y-%m-%d %H:%M} ET",
+        ticker=ticker, name=name, rules=STOCK_RULES, now=f"{now:%Y-%m-%d %H:%M} ET",
         data=_data_text, news="\n".join(news_lines),
     )
     out = _call(prompt)
+    lean = str(out.get("lean", "")).strip().title()
+    out["lean"] = lean if lean in ("Buy", "Hold", "Sell") else None
+    conv = str(out.get("conviction", "")).strip().title()
+    out["conviction"] = conv if conv in ("Low", "Medium", "High") else None
     out["generated_at"] = now
     return out

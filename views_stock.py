@@ -18,7 +18,7 @@ from common import (BENCHMARK, MAX_WATCHLIST, add_to_watchlist, big, get_watchli
                     remove_from_watchlist, safe, when)
 from ui import P, chip, esc, link, sgn, signed_class, src
 
-SECTIONS = ["Summary", "Chart", "Financials", "Valuation", "Outlook", "Compare", "News", "AI analysis"]
+SECTIONS = ["Summary", "Chart", "Financials", "Valuation", "Outlook", "Compare", "News", "Analysts & AI take"]
 RANGES = ["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y"]
 
 
@@ -137,7 +137,7 @@ def page_stock(wl: list[str]) -> None:
     ctx = {"t": t, "q": q, "p": p, "hist": hist, "bench": bench, "rf": rf, "rf_label": rf_label, "m": m, "met": met,
            "high52": high52, "low52": low52, "wl": wl}
     {"Summary": summary, "Chart": chart_section, "Financials": financials, "Valuation": valuation, "Outlook": outlook,
-     "Compare": compare, "News": news, "AI analysis": ai_section}[section](ctx)
+     "Compare": compare, "News": news, "Analysts & AI take": analysts_section}[section](ctx)
 
 
 # =========================================================================== Summary
@@ -192,11 +192,11 @@ def summary(c: dict) -> None:
             recs = safe(data.recommendations, t, default=[])
             if recs:
                 st.plotly_chart(charts.recommendations(recs), config=charts.CONFIG, key=f"recs_{t}")
-                r0 = recs[0]
-                total = sum(r0.get(k, 0) for k in ("strongBuy", "buy", "hold", "sell", "strongSell")) or 1
-                bulls = (r0.get("strongBuy", 0) + r0.get("buy", 0)) / total
-                st.html(f'<p class="mb-foot">{bulls:.0%} of {total} analysts rate it buy or strong buy ({r0.get("period", "")[:7]}). '
-                        "Sell-side ratings lean positive in general.</p>")
+                cs = analysis.consensus(recs[0])
+                if cs:
+                    bulls = (cs["counts"]["strongBuy"] + cs["counts"]["buy"]) / cs["n"]
+                    st.html(f'<p class="mb-foot">Consensus <b>{cs["label"]}</b> ({cs["score"]:.2f} / 5) from {cs["n"]} analysts, '
+                            f'{bulls:.0%} buy or strong buy ({cs["period"]}). Sell-side ratings lean positive in general.</p>')
             else:
                 st.caption("No analyst ratings available.")
     with c3:
@@ -386,7 +386,8 @@ def valuation(c: dict) -> dict | None:
                        f"− net debt {money(f['net_debt'])} = equity {money(base.equity_value)}; ÷ {shares / 1e9:,.2f}B shares = ${base.per_share:,.2f}. "
                        f"Terminal value is {pct(base.terminal_share, 0, False)} of EV.")
         result.update({"base": base.per_share, "bear": bear.per_share, "bull": bull.per_share, "growth": growth,
-                       "g_term": g_term, "discount": discount, "implied": implied, "label": label, "gap": gap})
+                       "g_term": g_term, "discount": discount, "implied": implied, "label": label, "gap": gap, "source": "your"})
+        st.session_state[f"val_{t}"] = result
     st.html(f'<div class="mb-sec">Multiples {src("rep")} {src("calc")}</div>' + stats_row([
         ("Market cap", money(mcap), ""), (f"P/E, FY{last_year}", f"{price / eps:,.1f}x" if eps and eps > 0 else "n/m", ""),
         (f"Price / FCF, FY{last_year}", f"{mcap / last_fcf:,.1f}x" if last_fcf > 0 else "n/m", ""),
@@ -499,7 +500,9 @@ def ai_data_text(c: dict, val: dict | None, out: dict | None) -> str:
                   "Free cash flow: " + "; ".join(f"FY{y}: {money(v)}" for y, v in f["fcf"].iloc[-5:].items()),
                   f"Net debt {money(f['net_debt'])}"]
         if val.get("base"):
-            lines.append(f"Base-case DCF (default assumptions: growth {pct(val['growth'])}, WACC {pct(val['discount'], 1, False)}): "
+            lines.append(f"Base-case DCF ({'assumptions set in the Valuation tab' if val.get('source') == 'your' else 'default assumptions'}: "
+                         f"growth {pct(val['growth'])} for 5 years, terminal growth {pct(val.get('g_term', 0.025), 1, False)}, "
+                         f"WACC {pct(val['discount'], 1, False)}): "
                          f"${val['base']:,.2f} per share, {val['label'].lower()} ({pct(val['gap'])} vs price); bear ${val['bear']:,.2f}, bull ${val['bull']:,.2f}")
             if val.get("implied") is not None:
                 lines.append(f"Reverse DCF: the price implies about {pct(val['implied'])} annual FCF growth for 5 years")
@@ -509,43 +512,111 @@ def ai_data_text(c: dict, val: dict | None, out: dict | None) -> str:
                      f"5th-95th percentile ${out['table']['6 months'][0]:,.2f} to ${out['table']['6 months'][4]:,.2f}; "
                      f"{pr['finish_up']:.0%} of paths end higher, {pr['drop_20']:.0%} fall 20% at some point")
     recs = safe(data.recommendations, c["t"], default=[])
-    if recs:
-        r0 = recs[0]
-        lines.append(f"Analyst ratings ({r0.get('period', '')[:7]}): strong buy {r0.get('strongBuy', 0)}, buy {r0.get('buy', 0)}, "
-                     f"hold {r0.get('hold', 0)}, sell {r0.get('sell', 0)}, strong sell {r0.get('strongSell', 0)}")
+    cs = analysis.consensus(recs[0]) if recs else None
+    if cs:
+        k = cs["counts"]
+        lines.append(f"Wall Street consensus ({cs['period']}, {cs['n']} analysts): {cs['label']}, average {cs['score']:.2f} on a 1-5 scale "
+                     f"(strong buy {k['strongBuy']}, buy {k['buy']}, hold {k['hold']}, sell {k['sell']}, strong sell {k['strongSell']})")
     e = safe(data.next_earnings, c["t"])
     if e:
         lines.append(f"Next earnings date: {e['date']} {e['timing']}")
     return "\n".join(lines)
 
 
-def ai_section(c: dict) -> None:
+def lean_badge(lean: str | None, big_text: bool = True) -> str:
+    cls = {"Buy": "up", "Strong Buy": "up", "Hold": "hold", "Sell": "down", "Strong Sell": "down"}.get(lean or "", "flat")
+    return f'<span class="mb-lean {cls}{" big" if big_text else ""}">{esc(lean or "n/a")}</span>'
+
+
+def default_val(c: dict) -> dict | None:
+    f = safe(data.company_fundamentals, c["t"])
+    if not f:
+        return None
+    if f["fcf"].empty or not f["shares"]:
+        return {"fundamentals": f}
+    v = analysis.default_valuation(f, c["q"]["price"], c["m"]["beta"], c["rf"])
+    if not v:
+        return {"fundamentals": f}
+    base_fcf = float(f["fcf"].iloc[-1])
+    implied = analysis.implied_growth(c["q"]["price"], base_fcf, 0.025, v["wacc"], f["net_debt"], f["shares"])
+    bear = analysis.dcf(base_fcf, max(v["growth"] - 0.05, -0.1), 0.025, v["wacc"] + 0.01, f["net_debt"], f["shares"]).per_share
+    bull = analysis.dcf(base_fcf, v["growth"] + 0.05, 0.025, max(v["wacc"] - 0.01, 0.031), f["net_debt"], f["shares"]).per_share
+    return {"fundamentals": f, "base": v["per_share"], "bear": bear, "bull": bull, "growth": v["growth"], "g_term": 0.025,
+            "discount": v["wacc"], "label": v["label"], "gap": v["gap"], "implied": implied, "source": "default"}
+
+
+def consensus_card(t: str) -> tuple[str, dict | None]:
+    recs = safe(data.recommendations, t, default=[]) or []
+    cs = analysis.consensus(recs[0]) if recs else None
+    head = (f'<div class="mb-kicker">What the experts say</div><div class="mb-h"><b>Wall Street consensus</b>'
+            f'<span>Finnhub recommendation trends {src("ana")}</span></div>')
+    if not cs:
+        return f'<div class="mb-panel mb-take">{head}<p class="mb-foot">No analyst ratings available for {esc(t)}.</p></div>', None
+    trend = ""
+    old = analysis.consensus(recs[3]) if len(recs) > 3 else (analysis.consensus(recs[-1]) if len(recs) > 1 else None)
+    if old:
+        d = cs["score"] - old["score"]
+        word = "more bullish" if d > 0.02 else "more bearish" if d < -0.02 else "unchanged"
+        trend = f' · {word} vs {old["period"]}'
+    k, n, pal = cs["counts"], cs["n"], P()
+    colors = {"strongBuy": pal["up"], "buy": pal["up"] + "99", "hold": pal["faint"], "sell": pal["down"] + "99", "strongSell": pal["down"]}
+    names = {"strongBuy": "Strong Buy", "buy": "Buy", "hold": "Hold", "sell": "Sell", "strongSell": "Strong Sell"}
+    bar = "".join(f'<i style="width:{k[x] / n * 100:.2f}%;background:{colors[x]}" title="{names[x]} {k[x]}"></i>' for x in names if k[x])
+    legend = " · ".join(f'<span><b style="background:{colors[x]}"></b>{names[x]} {k[x]}</span>' for x in names)
+    html_ = (f'<div class="mb-panel mb-take">{head}<div class="mb-take-row">{lean_badge(cs["label"])}'
+             f'<div><div class="mb-score num">{cs["score"]:.2f} <small>/ 5</small></div>'
+             f'<div class="mb-foot" style="margin:0">{n} analysts · {cs["period"]}{trend}</div></div></div>'
+             f'<div class="mb-stack">{bar}</div><div class="mb-legend">{legend}</div>'
+             f'<p class="mb-foot">Ratings from the brokerage analysts that cover the stock, aggregated monthly by Finnhub '
+             f'(5 = strong buy, 1 = strong sell). Price targets are not in the free plan.</p></div>')
+    return html_, cs
+
+
+def analysts_section(c: dict) -> None:
     t = c["t"]
     key = f"take_{t}"
-    st.html(f'<div class="mb-callout">{src("ai")} &nbsp;An analyst-style read of this stock written by AI from the data in the other sections '
-            "(prices, risk, SEC financials, DCF, scenario model, analyst ratings and recent news), and nothing else. "
-            "An interpretation, not investment advice.</div>")
-    if st.button("Generate AI analysis", type="primary", key=f"btn_{key}"):
-        with st.spinner("Collecting the data and writing the analysis… (10 to 30 seconds)"):
-            f = safe(data.company_fundamentals, t)
-            val = None
-            if f and not f["fcf"].empty and f["shares"]:
-                v = analysis.default_valuation(f, c["q"]["price"], c["m"]["beta"], c["rf"])
-                if v:
-                    implied = analysis.implied_growth(c["q"]["price"], float(f["fcf"].iloc[-1]), 0.025, v["wacc"], f["net_debt"], f["shares"])
-                    bear = analysis.dcf(float(f["fcf"].iloc[-1]), max(v["growth"] - 0.05, -0.1), 0.025, v["wacc"] + 0.01, f["net_debt"], f["shares"]).per_share
-                    bull = analysis.dcf(float(f["fcf"].iloc[-1]), v["growth"] + 0.05, 0.025, max(v["wacc"] - 0.01, 0.031), f["net_debt"], f["shares"]).per_share
-                    val = {"fundamentals": f, "base": v["per_share"], "bear": bear, "bull": bull, "growth": v["growth"],
-                           "discount": v["wacc"], "label": v["label"], "gap": v["gap"], "implied": implied}
-                else:
-                    val = {"fundamentals": f}
+    val = st.session_state.get(f"val_{t}")
+    using_yours = bool(val and val.get("base"))
+    card, cs = consensus_card(t)
+    left, right = st.columns(2, gap="medium")
+    left.html(card)
+    with right:
+        take = st.session_state.get(key)
+        head = (f'<div class="mb-kicker">Model view</div><div class="mb-h"><b>AI take</b>'
+                f'<span>Gemini reads the data on this page {src("ai")}</span></div>')
+        if take and take.get("lean"):
+            agree = ""
+            if cs:
+                same = (take["lean"] == "Buy" and cs["label"] in ("Buy", "Strong Buy")) or (take["lean"] == "Sell" and cs["label"] in ("Sell", "Strong Sell")) \
+                    or (take["lean"] == "Hold" and cs["label"] == "Hold")
+                agree = f'<span class="mb-chip {"up" if same else "flat"}">{"Agrees with" if same else "Differs from"} Wall Street</span>'
+            conv = f'<div class="mb-foot" style="margin:0">Conviction: {esc(take.get("conviction") or "n/a")}</div>'
+            st.html(f'<div class="mb-panel mb-take">{head}<div class="mb-take-row">{lean_badge(take["lean"])}<div>{agree}{conv}</div></div>'
+                    f'<p class="mb-p">{esc(take.get("lean_reason", ""))}</p>'
+                    f'<p class="mb-p"><b>Vs the consensus.</b> {esc(take.get("vs_consensus", ""))}</p>'
+                    f'<p class="mb-foot">Model opinion from the data in this app, written {take["generated_at"]:%b %d, %-I:%M %p} ET. '
+                    "Not investment advice.</p></div>")
+        else:
+            st.html(f'<div class="mb-panel mb-take">{head}<p class="mb-p">Click the button for a written take with a <b>Buy / Hold / Sell</b> lean, '
+                    "compared against the Wall Street consensus, plus bull, base and bear cases, risks and catalysts. "
+                    + ("It uses the <b>DCF assumptions set in the Valuation tab</b>." if using_yours else
+                       "It uses the default DCF assumptions; open the Valuation tab and adjust them first to use yours.")
+                    + '</p><p class="mb-foot">Data: fetched from the sources · Calc: computed by the app · AI: model opinion.</p></div>')
+        label = "Refresh AI take" if take else "Generate AI take"
+        clicked = st.button(label, type="primary", key=f"btn_{key}", width="stretch")
+    if clicked:
+        with st.spinner("Collecting the data and writing the take… (10 to 30 seconds)"):
+            v = val if using_yours else default_val(c)
             out = safe(outlook_for, t, "neutral", float(c["hist"]["close"].iloc[-1]), c["high52"], None)
             news_items = safe(data.company_news, t, default=[]) or []
+            assumptions = (f"{v.get('growth', 0):.4f}|{v.get('g_term', 0):.4f}|{v.get('discount', 0):.4f}|{v.get('source')}"
+                           if v and v.get("base") else "none")
             try:
-                st.session_state[key] = ai.stock_take(t, c["p"].get("name") or t, dt.date.today().isoformat(),
-                                                      ai_data_text(c, val, out), news_items)
+                st.session_state[key] = ai.stock_take(t, c["p"].get("name") or t, dt.date.today().isoformat(), assumptions,
+                                                      ai_data_text(c, v, out), news_items)
+                st.rerun()
             except Exception as exc:
-                st.warning(f"The AI analysis couldn't be written this time: {exc}")
+                st.warning(f"The AI take couldn't be written this time: {exc}")
     take = st.session_state.get(key)
     if not take:
         return
@@ -556,8 +627,8 @@ def ai_section(c: dict) -> None:
                     for title, k in (("Bear case", "bear_case"), ("Base case", "base_case"), ("Bull case", "bull_case")))
     risks = "".join(f"<li>{esc(r)}</li>" for r in take.get("risks", []))
     cats = "".join(f"<li>{esc(x)}</li>" for x in take.get("catalysts", []))
-    st.html(f'<div class="mb-story top">{body}</div><div class="mb-grid3">{cases}</div>'
+    st.html(f'<div class="mb-sec">Full AI analysis {src("ai")}</div><div class="mb-story top">{body}</div><div class="mb-grid3">{cases}</div>'
             f'<div class="mb-grid2"><div class="mb-story"><h3>Main risks</h3><ul>{risks}</ul></div>'
             f'<div class="mb-story"><h3>Coming catalysts</h3><ul>{cats}</ul></div></div>'
             f'<div class="mb-callout"><b>Conclusion.</b> {esc(take.get("conclusion", ""))}</div>'
-            f'<p class="mb-note">Written {take["generated_at"]:%b %d, %-I:%M %p} ET.</p>')
+            '<p class="mb-note">Not investment advice · statistics describe the past, they don\'t predict the future.</p>')

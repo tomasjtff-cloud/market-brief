@@ -284,3 +284,21 @@ def equal_weight_index(closes: dict[str, pd.Series], days: int) -> pd.Series:
     """Equal-weight, daily-rebalanced portfolio, rebased to 1."""
     rets = aligned_returns(closes, days)
     return (1 + rets.mean(axis=1)).cumprod()
+
+
+# --------------------------------------------------------------------------- analyst consensus
+RATING_KEYS = (("strongBuy", 5), ("buy", 4), ("hold", 3), ("sell", 2), ("strongSell", 1))
+
+
+def consensus(row: dict | None) -> dict | None:
+    """Average analyst rating on a 1 (strong sell) to 5 (strong buy) scale, with the usual labels."""
+    if not row:
+        return None
+    n = sum(int(row.get(k, 0) or 0) for k, _ in RATING_KEYS)
+    if n == 0:
+        return None
+    score = sum(int(row.get(k, 0) or 0) * w for k, w in RATING_KEYS) / n
+    label = ("Strong Buy" if score >= 4.5 else "Buy" if score >= 3.5 else "Hold" if score >= 2.5
+             else "Sell" if score >= 1.5 else "Strong Sell")
+    return {"score": score, "label": label, "n": n, "period": str(row.get("period", ""))[:7],
+            "counts": {k: int(row.get(k, 0) or 0) for k, _ in RATING_KEYS}}

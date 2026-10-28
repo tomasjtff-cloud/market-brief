@@ -133,3 +133,10 @@ def test_equal_weight_index():
     a, b = _prices(seed=4), _prices(seed=5)
     idx = analysis.equal_weight_index({"A": a, "B": b}, 100)
     assert len(idx) == 100 and idx.iloc[0] > 0
+
+
+def test_consensus():
+    c = analysis.consensus({"period": "2026-10-01", "strongBuy": 11, "buy": 20, "hold": 14, "sell": 3, "strongSell": 1})
+    assert c["n"] == 49 and c["label"] == "Buy" and abs(c["score"] - 184 / 49) < 1e-9
+    assert analysis.consensus({"hold": 0}) is None
+    assert analysis.consensus({"strongSell": 3})["label"] == "Strong Sell"

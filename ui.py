@@ -210,6 +210,24 @@ a.mb-card:hover {{ border-color: var(--faint); transform: translateY(-1px); }}
 .mb-cal div:last-child {{ border-bottom: none; }}
 .mb-cal span:last-child {{ text-align: right; color: var(--muted); }}
 
+/* ---------- analysts & AI take ---------- */
+.mb-take {{ height: 100%; }}
+.mb-kicker {{ color: var(--faint); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.15rem; }}
+.mb-take-row {{ display: flex; align-items: center; gap: 1rem; margin: 0.4rem 0 0.8rem; flex-wrap: wrap; }}
+.mb-lean {{ font-family: var(--mono); font-weight: 700; border-radius: 8px; padding: 0.25rem 0.7rem; font-size: 0.95rem; letter-spacing: 0.02em; }}
+.mb-lean.big {{ font-size: 1.45rem; padding: 0.4rem 0.95rem; }}
+.mb-lean.up {{ color: var(--up); background: var(--up-bg); }} .mb-lean.down {{ color: var(--down); background: var(--down-bg); }}
+.mb-lean.hold {{ color: var(--ai); background: var(--ai-bg); }} .mb-lean.flat {{ color: var(--muted); background: var(--flat-bg); }}
+.mb-score {{ font-family: var(--mono); font-size: 1.35rem; font-weight: 700; color: var(--ink); }}
+.mb-score small {{ font-size: 0.8rem; color: var(--faint); font-weight: 500; }}
+.mb-stack {{ display: flex; height: 10px; border-radius: 6px; overflow: hidden; gap: 2px; background: var(--soft); }}
+.mb-stack i {{ display: block; height: 100%; }}
+.mb-legend {{ display: flex; flex-wrap: wrap; gap: 0.35rem 0.8rem; margin-top: 0.55rem; color: var(--muted); font-size: 0.76rem; }}
+.mb-legend b {{ display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 0.3rem; vertical-align: 0; }}
+.mb-p {{ color: var(--body); font-size: 0.88rem; line-height: 1.55; margin: 0 0 0.5rem; }}
+.mb-p b {{ color: var(--ink); }}
+.mb-chip {{ display: inline-block; margin-bottom: 0.25rem; }}
+
 /* ---------- news & note ---------- */
 .mb-lead {{ font-size: 1.05rem; line-height: 1.65; color: var(--ink); margin: 0 0 0.9rem; max-width: 95ch; }}
 .mb-story {{ background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem 1.05rem 0.8rem; }}

@@ -12,7 +12,7 @@ Everything runs on free data sources and free hosting, and works on a phone.
 | **Map** | The 25 largest US companies as a treemap sized by market value and colored by today's move, plus top gainers, decliners and sectors |
 | **Watchlist** | Up to eight stocks in one table: price, returns (1D to 1Y), volatility, beta, max drawdown, 52-week range, 6-month sparkline, P/E, market cap, DCF value, upside and next earnings |
 | **Compare** | Up to six stocks rebased to 100 against SPY and an equal-weight portfolio, with return, volatility, Sharpe, drawdown, beta and a correlation heatmap |
-| **Stock** | Quote header and key stats; **Summary** (chart 1D to 5Y, key statistics, performance vs S&P 500, analyst ratings, key levels, profile); **Chart** (area or candles, 50/200-day averages, Bollinger bands, RSI, ±1σ range ahead, drawdown); **Financials** (six years from 10-K filings, margins); **Valuation** (interactive DCF, bear/bull, reverse DCF, football field, sensitivity, multiples); **Outlook** (4,000 bootstrap scenarios over 6 months, fan chart, scenario table at 1/3/6 months, probabilities, trend assumption); **Compare**; **News**; **AI analysis** |
+| **Stock** | Quote header and key stats; **Summary** (chart 1D to 5Y, key statistics, performance vs S&P 500, analyst ratings, key levels, profile); **Chart** (area or candles, 50/200-day averages, Bollinger bands, RSI, ±1σ range ahead, drawdown); **Financials** (six years from 10-K filings, margins); **Valuation** (interactive DCF, bear/bull, reverse DCF, football field, sensitivity, multiples); **Outlook** (4,000 bootstrap scenarios over 6 months, fan chart, scenario table at 1/3/6 months, probabilities, trend assumption); **Compare**; **News**; **Analysts & AI take** (Wall Street consensus from analyst ratings next to an AI Buy / Hold / Sell lean that uses your DCF assumptions, plus a full written analysis) |
 | **Methodology** | How every number is calculated and where it comes from |
 
 ## Methodology
@@ -29,7 +29,9 @@ Everything runs on free data sources and free hosting, and works on a phone.
 
 **Reverse DCF.** Solves (by bisection) for the five-year growth rate that makes intrinsic value equal the current price, which shows what the market is already pricing in.
 
-**AI guardrails.** Google Gemini writes the brief and the per-stock take. It only receives the headlines and numbers shown in the app and is instructed not to add facts, give recommendations or set price targets. Every story links back to its sources, and output is cached to stay within the free quota.
+**Analyst consensus.** Finnhub's monthly recommendation trends, averaged on a 1 (strong sell) to 5 (strong buy) scale: 4.5+ Strong Buy, 3.5+ Buy, 2.5+ Hold, 1.5+ Sell, below that Strong Sell, with the change versus three months earlier.
+
+**AI guardrails.** Google Gemini writes the brief and the per-stock take. It only receives the headlines and numbers shown in the app and is instructed not to add facts or set price targets. The stock take gives a Buy / Hold / Sell lean with a conviction level, labeled as a model opinion and compared with the Wall Street consensus. Every story links back to its sources, and output is cached to stay within the free quota.
 
 ## Data sources
 
