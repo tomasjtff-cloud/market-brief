@@ -14,7 +14,7 @@ import charts
 import data
 from common import (BENCHMARK, INDEX_ETFS, MAX_WATCHLIST, add_to_watchlist, big, get_watchlist, isnum, money, num,
                     pct, remove_from_watchlist, safe, status_line, when)
-from ui import chip, esc, link, range_bar, sgn, signed_class, spark_svg, src
+from ui import chip, esc, link, pill, range_bar, sgn, signed_class, spark_svg, src
 
 CLOCKS = [("New York", "America/New_York"), ("Mexico City", "America/Mexico_City"),
           ("Buenos Aires", "America/Argentina/Buenos_Aires"), ("London", "Europe/London")]
@@ -40,19 +40,25 @@ def quick_value(ticker: str, price: float) -> dict | None:
 
 
 # =========================================================================== Markets
+LOW_HIGH = "Today's low → high"
+
+
 def index_cards() -> list[str]:
     cards, snapshot = [], []
+    status = safe(data.market_status, default={}) or {}
     for name, sym in INDEX_ETFS:
         q = safe(data.quote, sym)
+        head = f'<div class="hd"><span class="n">{name}</span><span class="via">via {sym}</span></div>'
         if not q:
-            cards.append(f'<div class="mb-card"><div class="n">{name} · {sym}</div><div class="p">n/a</div></div>')
+            cards.append(f'<div class="mb-card">{head}<div class="p">n/a</div></div>')
             continue
-        cls = signed_class(q["pct"])
+        state = f"Live · {q['time']:%-I:%M %p} ET" if status.get("isOpen") else f"Close · {q['time']:%b %-d}"
         cards.append(
-            f'<a class="mb-card" href="{link({"p": "stock", "t": sym})}" target="_self"><div class="n">{name} <span style="color:var(--faint)">{sym}</span></div>'
-            f'<div class="p num">${q["price"]:,.2f}</div>'
-            f'<div class="c num {cls}">{sgn(q["change"] or 0, 2, "")} ({sgn(q["pct"] or 0)})</div>'
-            f'{range_bar(q["low"], q["high"], q["price"])}<div class="a">{when(q["time"])}</div></a>')
+            f'<a class="mb-card" href="{link({"p": "stock", "t": sym})}" target="_self">{head}'
+            f'<div class="p">${q["price"]:,.2f}</div>'
+            f'<div class="c">{pill(q["pct"])}<span class="abs">{sgn(q["change"] or 0, 2, "")}</span></div>'
+            f'{range_bar(q["low"], q["high"], q["price"], left="$", right="$", label=LOW_HIGH)}'
+            f'<div class="a">{state}</div></a>')
         snapshot.append(f"{name} ({sym}): ${q['price']:,.2f} ({q['pct']:+.2f}% today)")
     st.html(f'<div class="mb-cards" style="--cols:6">{"".join(cards)}</div>')
     return snapshot

@@ -2,7 +2,7 @@
 
 Design direction: a professional market terminal in the Yahoo Finance / Finviz family.
 - Dense, scannable data; one sans family (Inter) with tabular figures everywhere.
-- A navy masthead and a moving ticker tape frame every page; content sits on calm surfaces.
+- A navy (light) or graphite (dark) masthead, prices in JetBrains Mono, and a moving ticker tape frame every page; content sits on calm surfaces.
 - Green/red only for direction, always with a sign. Every figure carries its provenance.
 """
 from __future__ import annotations
@@ -20,15 +20,17 @@ PALETTES = {
         "calc": "#5B45C9", "calc_bg": "#EEEBFB", "ai": "#9A5B00", "ai_bg": "#FBF0DC", "rep": "#1F5BD8",
         "rep_bg": "#E6EDFC", "grid": "rgba(15,26,42,0.06)", "fill": "rgba(31,91,216,0.10)", "orange": "#E0782A",
         "violet": "#6E56CF", "teal": "#0E9AA7", "chart_bg": "#FFFFFF",
+        "mast": "#0B1526", "mast2": "#13213A", "mast_line": "#1E2C47", "tape": "#0F1D33",
     },
     "dark": {
-        "paper": "#0A0F18", "surface": "#111827", "raised": "#151E2E", "ink": "#E9EEF5", "body": "#C7D1DE",
-        "muted": "#93A0B3", "faint": "#6C7A8F", "line": "#222E42", "soft": "#18233A", "accent": "#5E8EFF",
-        "up": "#2FC57A", "down": "#F2645B", "up_bg": "rgba(47,197,122,0.14)", "down_bg": "rgba(242,100,91,0.15)",
-        "flat_bg": "#1B2740", "calc": "#B3A6FF", "calc_bg": "rgba(179,166,255,0.14)", "ai": "#F2B84B",
-        "ai_bg": "rgba(242,184,75,0.14)", "rep": "#8FB2FF", "rep_bg": "rgba(94,142,255,0.15)",
-        "grid": "rgba(233,238,245,0.06)", "fill": "rgba(94,142,255,0.14)", "orange": "#F0954B",
-        "violet": "#A08CFF", "teal": "#35C2CE", "chart_bg": "#111827",
+        "paper": "#0B0C0F", "surface": "#15171C", "raised": "#1A1D23", "ink": "#F2F4F7", "body": "#C9CED6",
+        "muted": "#9AA1AD", "faint": "#6F7682", "line": "#262A32", "soft": "#1E2128", "accent": "#6E9BFF",
+        "up": "#4ADE80", "down": "#F87171", "up_bg": "rgba(74,222,128,0.13)", "down_bg": "rgba(248,113,113,0.14)",
+        "flat_bg": "#22262E", "calc": "#B9ADFF", "calc_bg": "rgba(185,173,255,0.13)", "ai": "#F4C152",
+        "ai_bg": "rgba(244,193,82,0.13)", "rep": "#93B4FF", "rep_bg": "rgba(110,155,255,0.14)",
+        "grid": "rgba(242,244,247,0.06)", "fill": "rgba(110,155,255,0.14)", "orange": "#F59E57",
+        "violet": "#A78BFA", "teal": "#3CC8D2", "chart_bg": "#15171C",
+        "mast": "#0E1014", "mast2": "#1A1D23", "mast_line": "#22252C", "tape": "#111317",
     },
 }
 
@@ -47,13 +49,14 @@ def P() -> dict:
 def _css(p: dict) -> str:
     return f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
 :root {{
   --paper:{p['paper']}; --surface:{p['surface']}; --raised:{p['raised']}; --ink:{p['ink']}; --body:{p['body']};
   --muted:{p['muted']}; --faint:{p['faint']}; --line:{p['line']}; --soft:{p['soft']}; --accent:{p['accent']};
   --up:{p['up']}; --down:{p['down']}; --up-bg:{p['up_bg']}; --down-bg:{p['down_bg']}; --flat-bg:{p['flat_bg']};
   --calc:{p['calc']}; --calc-bg:{p['calc_bg']}; --ai:{p['ai']}; --ai-bg:{p['ai_bg']}; --rep:{p['rep']}; --rep-bg:{p['rep_bg']};
-  --navy: #0B1526; --navy2: #13213A;
+  --navy:{p['mast']}; --navy2:{p['mast2']}; --mast-line:{p['mast_line']}; --tape:{p['tape']};
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }}
 html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-serif; }}
 .stApp {{ font-feature-settings: "tnum" 1, "cv11" 1; }}
@@ -68,8 +71,12 @@ h1, h2, h3, h4 {{ font-family: 'Inter', system-ui, sans-serif !important; letter
 
 /* ---------- masthead (top bar) ---------- */
 .st-key-topbar {{ background: var(--navy); margin: 0 -1.4rem; padding: 0.55rem 1.4rem 0.5rem; width: calc(100% + 2.8rem) !important; max-width: none !important;
-  border-bottom: 1px solid #1E2C47; gap: 0.4rem; }}
+  border-bottom: 1px solid var(--mast-line); gap: 0.4rem; }}
 .st-key-topbar p, .st-key-topbar label {{ color: #DCE5F2; }}
+/* Streamlit Cloud draws its own toolbar (Share / Fork / GitHub / menu) in the top-right corner:
+   keep that corner free so it never sits on top of the search box. */
+@media (min-width: 641px) {{ .st-key-topbar {{ padding-right: calc(1.4rem + 250px) !important; }} }}
+@media (max-width: 640px) {{ .st-key-topbar {{ padding-top: 2.6rem !important; }} }}
 .mb-logo {{ display: flex; align-items: center; gap: 0.55rem; color: #FFF; font-weight: 700; font-size: 1.12rem;
   letter-spacing: -0.02em; white-space: nowrap; }}
 .mb-logo .mark {{ width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg,#3B7BFF,#16C784);
@@ -79,19 +86,20 @@ h1, h2, h3, h4 {{ font-family: 'Inter', system-ui, sans-serif !important; letter
   font-weight: 500; padding: 0.3rem 0.75rem; min-height: 2.1rem; }}
 .st-key-topbar [data-testid="stButtonGroup"] button:hover {{ background: var(--navy2); color: #FFF; }}
 .st-key-topbar [data-testid="stButtonGroup"] button[aria-checked="true"],
-.st-key-topbar [data-testid="stButtonGroup"] button[kind="segmented_controlActive"] {{ background: #1F3460; color: #FFF; }}
-.st-key-topbar input {{ background: #13213A !important; color: #FFF !important; border-color: #263A5E !important; }}
+.st-key-topbar [data-testid="stButtonGroup"] button[kind="segmented_controlActive"] {{ background: var(--navy2); color: #FFF; box-shadow: inset 0 -2px 0 var(--accent); }}
+.st-key-topbar input {{ background: var(--navy2) !important; color: #FFF !important; border-color: var(--mast-line) !important; }}
 .st-key-topbar input::placeholder {{ color: #7F93B3 !important; }}
-.st-key-topbar [data-baseweb="select"] > div {{ background: #13213A; border-color: #263A5E; color: #FFF; }}
+.st-key-topbar [data-baseweb="select"] > div {{ background: var(--navy2); border-color: var(--mast-line); color: #FFF; }}
 
 /* ---------- ticker tape ---------- */
-.mb-tape {{ margin: 0 -1.4rem 1rem; background: #0F1D33; border-bottom: 1px solid #1E2C47; overflow: hidden;
+.mb-tape {{ margin: 0 -1.4rem 1rem; background: var(--tape); border-bottom: 1px solid var(--mast-line); overflow: hidden;
   white-space: nowrap; position: relative; }}
 .mb-tape .track {{ display: inline-flex; animation: mbscroll 70s linear infinite; padding: 0.42rem 0; }}
 .mb-tape:hover .track {{ animation-play-state: paused; }}
-.mb-tape a {{ display: inline-flex; gap: 0.45rem; align-items: baseline; padding: 0 1.15rem; border-right: 1px solid #1E2C47;
+.mb-tape a {{ display: inline-flex; gap: 0.45rem; align-items: baseline; padding: 0 1.15rem; border-right: 1px solid var(--mast-line);
   color: #DCE5F2 !important; text-decoration: none !important; font-size: 0.82rem; }}
 .mb-tape a b {{ color: #FFF; font-weight: 600; }}
+.mb-tape a span {{ font-family: var(--mono); font-size: 0.78rem; }}
 .mb-tape .u {{ color: #33D17A; }} .mb-tape .d {{ color: #FF6B61; }} .mb-tape .f {{ color: #9FB0C8; }}
 @keyframes mbscroll {{ from {{ transform: translateX(0); }} to {{ transform: translateX(-50%); }} }}
 @media (prefers-reduced-motion: reduce) {{ .mb-tape .track {{ animation: none; }} .mb-tape {{ overflow-x: auto; }} }}
@@ -120,13 +128,20 @@ h1, h2, h3, h4 {{ font-family: 'Inter', system-ui, sans-serif !important; letter
 
 /* ---------- index cards ---------- */
 .mb-cards {{ display: grid; grid-template-columns: repeat(var(--cols, 6), minmax(0, 1fr)); gap: 0.65rem; }}
-.mb-card {{ background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.7rem 0.85rem 0.6rem;
-  text-decoration: none !important; display: block; color: inherit !important; }}
-a.mb-card:hover {{ border-color: var(--accent); }}
-.mb-card .n {{ color: var(--muted); font-size: 0.78rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-.mb-card .p {{ color: var(--ink); font-size: 1.22rem; font-weight: 650; margin-top: 0.1rem; white-space: nowrap; }}
-.mb-card .c {{ font-size: 0.82rem; font-weight: 600; margin-top: 0.05rem; white-space: nowrap; }}
-.mb-card .a {{ color: var(--faint); font-size: 0.68rem; margin-top: 0.35rem; }}
+.mb-card {{ background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0.95rem 1.05rem 0.85rem;
+  text-decoration: none !important; display: block; color: inherit !important; transition: border-color .15s, transform .15s; }}
+a.mb-card:hover {{ border-color: var(--faint); transform: translateY(-1px); }}
+.mb-card .hd {{ display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }}
+.mb-card .n {{ color: var(--ink); font-size: 0.92rem; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+.mb-card .via {{ color: var(--faint); font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.08em; white-space: nowrap; }}
+.mb-card .p {{ color: var(--ink); font-family: var(--mono); font-size: 1.55rem; font-weight: 700; margin-top: 0.45rem;
+  letter-spacing: -0.02em; white-space: nowrap; line-height: 1.15; }}
+.mb-card .c {{ display: flex; align-items: center; gap: 0.45rem; margin-top: 0.4rem; white-space: nowrap; }}
+.mb-card .c .abs {{ font-family: var(--mono); font-size: 0.74rem; color: var(--muted); }}
+.mb-card .a {{ color: var(--faint); font-size: 0.74rem; margin-top: 0.7rem; }}
+.mb-pill {{ font-family: var(--mono); font-size: 0.8rem; font-weight: 600; padding: 0.18rem 0.5rem; border-radius: 6px; }}
+.mb-pill.up {{ color: var(--up); background: var(--up-bg); }} .mb-pill.down {{ color: var(--down); background: var(--down-bg); }}
+.mb-pill.flat {{ color: var(--muted); background: var(--flat-bg); }}
 @media (max-width: 1100px) {{ .mb-cards {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }} }}
 @media (max-width: 640px) {{ .mb-cards {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
 
@@ -142,10 +157,13 @@ a.mb-card:hover {{ border-color: var(--accent); }}
 .src.ai {{ color: var(--ai); background: var(--ai-bg); }}
 .src.ana {{ color: var(--up); background: var(--up-bg); }}
 .mb-range {{ margin-top: 0.4rem; min-width: 7rem; }}
-.mb-range .track {{ position: relative; height: 4px; border-radius: 4px; background: var(--soft); }}
-.mb-range .fill {{ position: absolute; top: 0; bottom: 0; left: 0; border-radius: 4px; background: var(--line); }}
-.mb-range .mark {{ position: absolute; top: -3px; width: 3px; height: 10px; border-radius: 2px; background: var(--ink); transform: translateX(-1px); }}
-.mb-range .ends {{ display: flex; justify-content: space-between; color: var(--faint); font-size: 0.66rem; margin-top: 0.2rem; gap: 0.4rem; }}
+.mb-range .lbl {{ color: var(--faint); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.09em; text-transform: uppercase; margin: 0.75rem 0 0.4rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+@media (max-width: 640px) {{ .mb-card .via {{ display: none; }} .mb-range .lbl {{ letter-spacing: 0.04em; }} }}
+.mb-range .track {{ position: relative; height: 5px; border-radius: 5px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--down) 75%, transparent), color-mix(in srgb, #E0B341 70%, transparent) 50%, color-mix(in srgb, var(--up) 75%, transparent)); }}
+.mb-range .mark {{ position: absolute; top: -4px; width: 3px; height: 13px; border-radius: 2px; background: var(--ink);
+  transform: translateX(-1.5px); box-shadow: 0 0 0 2px var(--surface); }}
+.mb-range .ends {{ display: flex; justify-content: space-between; color: var(--muted); font-family: var(--mono); font-size: 0.7rem; margin-top: 0.4rem; gap: 0.4rem; }}
 .mb-spark {{ display: block; width: 100%; height: 30px; }}
 
 /* ---------- data tables (Finviz-style) ---------- */
@@ -171,7 +189,7 @@ a.mb-card:hover {{ border-color: var(--accent); }}
 .mb-cell {{ background: var(--surface); padding: 0.7rem 0.85rem 0.6rem; }}
 .mb-cell .name {{ color: var(--muted); font-size: 0.78rem; }}
 .mb-cell .row {{ display: flex; align-items: center; justify-content: space-between; gap: 0.3rem 0.5rem; margin-top: 0.12rem; flex-wrap: wrap; }}
-.mb-cell .px {{ font-size: 1.15rem; font-weight: 650; color: var(--ink); white-space: nowrap; }}
+.mb-cell .px {{ font-family: var(--mono); letter-spacing: -0.02em; font-size: 1.15rem; font-weight: 650; color: var(--ink); white-space: nowrap; }}
 .mb-cell .asof {{ color: var(--faint); font-size: 0.68rem; margin-top: 0.3rem; }}
 @media (max-width: 640px) {{ .mb-board {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
 
@@ -182,7 +200,7 @@ a.mb-card:hover {{ border-color: var(--accent); }}
 .mb-wrow:hover .tk {{ color: var(--accent); }}
 .mb-wrow .tk {{ font-weight: 650; color: var(--ink); font-size: 0.9rem; }}
 .mb-wrow .co {{ color: var(--muted); font-size: 0.74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 9rem; }}
-.mb-wrow .px {{ text-align: right; font-weight: 600; color: var(--ink); font-size: 0.88rem; }}
+.mb-wrow .px {{ font-family: var(--mono); text-align: right; font-weight: 600; color: var(--ink); font-size: 0.88rem; }}
 .mb-cal div {{ display: grid; grid-template-columns: 4rem 1fr; gap: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid var(--soft); font-size: 0.82rem; color: var(--body); }}
 .mb-cal div:last-child {{ border-bottom: none; }}
 .mb-cal span:last-child {{ text-align: right; color: var(--muted); }}
@@ -218,7 +236,7 @@ a.mb-card:hover {{ border-color: var(--accent); }}
 .mb-quote .logo {{ width: 46px; height: 46px; border-radius: 10px; background: #FFF; border: 1px solid var(--line); object-fit: contain; padding: 5px; }}
 .mb-quote .co {{ font-size: 1.55rem; font-weight: 700; color: var(--ink); line-height: 1.15; }}
 .mb-quote .meta {{ color: var(--muted); font-size: 0.82rem; margin-top: 0.2rem; display: flex; gap: 0.45rem; flex-wrap: wrap; align-items: center; }}
-.mb-quote .px {{ font-size: 2.1rem; font-weight: 700; color: var(--ink); line-height: 1; }}
+.mb-quote .px {{ font-family: var(--mono); letter-spacing: -0.03em; font-size: 2.1rem; font-weight: 700; color: var(--ink); line-height: 1; }}
 .mb-quote .chg {{ font-size: 1.05rem; font-weight: 600; margin-left: 0.6rem; }}
 .mb-quote .asof {{ color: var(--faint); font-size: 0.74rem; margin-top: 0.35rem; }}
 .mb-tag {{ font-size: 0.74rem; font-weight: 600; padding: 0.08rem 0.45rem; border-radius: 5px; background: var(--flat-bg); color: var(--ink); }}
@@ -226,7 +244,7 @@ a.mb-card:hover {{ border-color: var(--accent); }}
   grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); overflow: hidden; }}
 .mb-stat {{ background: var(--surface); padding: 0.6rem 0.8rem; }}
 .mb-stat .k {{ color: var(--muted); font-size: 0.74rem; }}
-.mb-stat .v {{ font-size: 1.08rem; font-weight: 650; color: var(--ink); margin-top: 0.08rem; }}
+.mb-stat .v {{ font-family: var(--mono); letter-spacing: -0.02em; font-size: 1.05rem; font-weight: 650; color: var(--ink); margin-top: 0.08rem; }}
 .mb-stat .s {{ color: var(--faint); font-size: 0.68rem; margin-top: 0.06rem; }}
 @media (max-width: 900px) {{ .mb-stats {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
 .mb-callout {{ background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent);
@@ -235,12 +253,12 @@ a.mb-card:hover {{ border-color: var(--accent); }}
 .mb-verdict {{ background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.95rem 1.15rem;
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 0.5rem 0; }}
 .mb-verdict .k {{ color: var(--muted); font-size: 0.78rem; }}
-.mb-verdict .v {{ font-size: 1.7rem; font-weight: 700; color: var(--ink); line-height: 1.15; }}
+.mb-verdict .v {{ font-family: var(--mono); letter-spacing: -0.03em; font-size: 1.7rem; font-weight: 700; color: var(--ink); line-height: 1.15; }}
 .mb-verdict .label {{ font-size: 1.15rem; font-weight: 700; }}
 @media (max-width: 760px) {{ .mb-verdict {{ grid-template-columns: 1fr; }} }}
 .mb-prob {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.6rem; }}
 .mb-prob > div {{ background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.7rem 0.85rem; }}
-.mb-prob .v {{ font-size: 1.5rem; font-weight: 700; color: var(--ink); }}
+.mb-prob .v {{ font-family: var(--mono); letter-spacing: -0.02em; font-size: 1.5rem; font-weight: 700; color: var(--ink); }}
 .mb-prob .k {{ color: var(--muted); font-size: 0.78rem; line-height: 1.35; margin-top: 0.15rem; }}
 .mb-prob .bar {{ height: 4px; background: var(--soft); border-radius: 4px; margin-top: 0.5rem; overflow: hidden; }}
 .mb-prob .bar i {{ display: block; height: 100%; background: var(--accent); }}
@@ -295,13 +313,20 @@ def src(kind: str) -> str:
 
 
 def range_bar(low: float | None, high: float | None, value: float | None, fmt: str = "{:,.2f}",
-              left: str = "", right: str = "") -> str:
+              left: str = "", right: str = "", label: str = "") -> str:
     if not low or not high or value is None or high <= low:
         return ""
     pos = max(0.0, min(1.0, (value - low) / (high - low))) * 100
-    return (f'<div class="mb-range"><div class="track"><div class="fill" style="width:{pos:.1f}%"></div>'
-            f'<div class="mark" style="left:{pos:.1f}%"></div></div>'
+    head = f'<div class="lbl">{esc(label)}</div>' if label else ""
+    return (f'<div class="mb-range">{head}<div class="track"><div class="mark" style="left:{pos:.1f}%"></div></div>'
             f'<div class="ends"><span>{esc(left)}{esc(fmt.format(low))}</span><span>{esc(right)}{esc(fmt.format(high))}</span></div></div>')
+
+
+def pill(pct_value: float | None) -> str:
+    if pct_value is None:
+        return '<span class="mb-pill flat">n/a</span>'
+    cls = "up" if pct_value > 0 else "down" if pct_value < 0 else "flat"
+    return f'<span class="mb-pill {cls}">{sgn(pct_value)}</span>'
 
 
 def spark_svg(values, up: bool | None = None, width: int = 160, height: int = 30) -> str:

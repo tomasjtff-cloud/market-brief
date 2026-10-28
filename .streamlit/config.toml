@@ -1,7 +1,8 @@
 [theme]
-font = "IBM Plex Sans:https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap"
-headingFont = "Newsreader:https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap"
-headingFontWeights = [600, 600, 600, 600, 600, 600]
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFontWeights = [700, 700, 650, 650, 600, 600]
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&display=swap"
 baseRadius = "0.6rem"
 showWidgetBorder = true
 
@@ -17,13 +18,13 @@ redColor = "#C8362F"
 
 [theme.dark]
 primaryColor = "#6E9BFF"
-backgroundColor = "#0B1220"
-secondaryBackgroundColor = "#152034"
-textColor = "#E8EDF4"
-linkColor = "#8FB2FF"
-borderColor = "#223049"
-greenColor = "#3CCB7F"
-redColor = "#F26B61"
+backgroundColor = "#0B0C0F"
+secondaryBackgroundColor = "#1A1D23"
+textColor = "#F2F4F7"
+linkColor = "#93B4FF"
+borderColor = "#262A32"
+greenColor = "#4ADE80"
+redColor = "#F87171"
 
 [theme.sidebar]
 backgroundColor = "#0F1C2E"
