@@ -80,7 +80,8 @@ h1, h2, h3, h4 {{ font-family: 'Inter', system-ui, sans-serif !important; letter
 .st-key-topbar p, .st-key-topbar label {{ color: #DCE5F2; }}
 /* Streamlit Cloud draws its own toolbar (Share / Fork / GitHub / menu) in the top-right corner:
    keep that corner free so it never sits on top of the search box. */
-@media (min-width: 641px) {{ .st-key-topbar {{ padding-right: calc(1.4rem + 250px) !important; }} }}
+@media (min-width: 641px) {{ .st-key-topbar {{ padding-right: calc(1.4rem + 200px) !important; }} }}
+@media (max-width: 1500px) {{ .mb-logo small {{ display: none !important; }} .mb-logo {{ font-size: 1rem !important; }} }}
 @media (max-width: 640px) {{ .st-key-topbar {{ padding-top: 2.6rem !important; }} }}
 .mb-logo {{ display: flex; align-items: center; gap: 0.55rem; color: #FFF; font-weight: 700; font-size: 1.12rem;
   letter-spacing: -0.02em; white-space: nowrap; }}
@@ -88,7 +89,8 @@ h1, h2, h3, h4 {{ font-family: 'Inter', system-ui, sans-serif !important; letter
   display: inline-flex; align-items: center; justify-content: center; color: #FFF; font-size: 0.8rem; font-weight: 800; }}
 .mb-logo small {{ display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem; color: #8FA3C2; font-weight: 500; font-size: 0.7rem; letter-spacing: 0; }}
 .st-key-topbar [data-testid="stButtonGroup"] button {{ background: transparent; border: none; color: #C9D6EA;
-  font-weight: 500; padding: 0.3rem 0.6rem; min-height: 2.1rem; }}
+  font-weight: 500; padding: 0.3rem 0.45rem; min-height: 2.1rem; font-size: 0.88rem; }}
+.st-key-topbar [data-testid="stButtonGroup"] button p {{ font-size: 0.88rem; }}
 .st-key-topbar [data-testid="stButtonGroup"] button:hover {{ background: var(--navy2); color: #FFF; }}
 .st-key-topbar [data-testid="stButtonGroup"] button[aria-checked="true"],
 .st-key-topbar [data-testid="stButtonGroup"] button[kind="segmented_controlActive"] {{ background: var(--navy2); color: #FFF; box-shadow: inset 0 -2px 0 var(--accent); }}
@@ -241,6 +243,13 @@ a.mb-card:hover {{ border-color: var(--faint); transform: translateY(-1px); }}
 .mb-tone b {{ display: block; color: var(--ink); font-size: 0.84rem; font-weight: 650; }}
 .mb-tone span {{ color: var(--muted); font-size: 0.72rem; }}
 .mb-tone.up {{ border-left-color: var(--up); }} .mb-tone.down {{ border-left-color: var(--down); }} .mb-tone.hold {{ border-left-color: var(--ai); }}
+
+/* ---------- portfolio ---------- */
+.mb-check {{ display: flex; gap: 0.8rem; align-items: flex-start; padding: 0.55rem 0; border-bottom: 1px solid var(--soft); }}
+.mb-check:last-child {{ border-bottom: none; }}
+.mb-check .mb-lean {{ flex: none; font-size: 0.78rem; }}
+.mb-check .mb-p {{ margin: 0.1rem 0 0; }}
+.mb-story h3 .mb-lean {{ font-size: 0.74rem; padding: 0.12rem 0.45rem; margin-left: 0.35rem; vertical-align: 2px; }}
 
 /* ---------- news & note ---------- */
 .mb-lead {{ font-size: 1.05rem; line-height: 1.65; color: var(--ink); margin: 0 0 0.9rem; max-width: 95ch; }}

@@ -12,7 +12,7 @@ import streamlit as st
 st.set_page_config(page_title="Market Brief", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
 
 # Streamlit Cloud keeps imported modules between deploys; drop ours if any source file changed.
-_LOCAL = ("i18n_es", "i18n", "ui", "data", "news", "fundamentals", "analysis", "ai", "charts", "common", "views_market", "views_stock", "views_news")
+_LOCAL = ("i18n_es", "i18n", "ui", "data", "news", "fundamentals", "analysis", "ai", "charts", "common", "views_market", "views_stock", "views_news", "portfolio", "store", "views_portfolio")
 
 
 def _stale() -> bool:
@@ -28,10 +28,12 @@ if _stale():
         sys.modules.pop(name, None)
 
 from common import current_page, get_watchlist, init_state, ticker_tape, top_bar  # noqa: E402
+from i18n import T  # noqa: E402
 from ui import inject_css  # noqa: E402
 import views_market as vm  # noqa: E402
 import views_stock as vs  # noqa: E402
 import views_news as vn  # noqa: E402
+import views_portfolio as vp  # noqa: E402
 
 for _name in _LOCAL:
     if _name in sys.modules:
@@ -48,6 +50,8 @@ if page == "Markets":
     vm.page_markets(wl)
 elif page == "News":
     vn.page_news()
+elif page == "Portfolio":
+    vp.page_portfolio()
 elif page == "Map":
     vm.page_map()
 elif page == "Watchlist":
@@ -59,6 +63,6 @@ elif page == "Stock":
 else:
     vm.page_method()
 
-st.html('<p class="mb-foot" style="text-align:center;margin:2rem 0 .5rem">Market Brief · data from Finnhub, Twelve Data, FRED, '
-        'SEC EDGAR, CoinGecko and DolarApi · AI text by Google Gemini · for information and learning, not investment advice. '
-        '<a href="https://github.com/tomasjtff-cloud/market-brief" target="_blank" rel="noopener">Source code</a></p>')
+st.html('<p class="mb-foot" style="text-align:center;margin:2rem 0 .5rem">'
+        + T("Market Brief · data from Finnhub, Twelve Data, FRED, SEC EDGAR, CoinGecko and DolarApi · AI text by Google Gemini · for information and learning, not investment advice.")
+        + ' <a href="https://github.com/tomasjtff-cloud/market-brief" target="_blank" rel="noopener">' + T("Source code") + "</a></p>")

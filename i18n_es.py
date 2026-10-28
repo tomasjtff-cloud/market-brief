@@ -313,7 +313,229 @@ que muestra la app, con instrucciones de no agregar hechos ni fijar precios obje
 Compra / Mantener / Venta, marcada como opinión del modelo. La app elige un modelo Gemini rápido disponible y cambia si alguno
 está saturado.
 
+#### Portafolio y gestión de riesgo
+Tus operaciones (compras, ventas, dividendos, depósitos y retiros) se guardan solo en el almacenamiento local de tu
+navegador, con un respaldo JSON para descargar y restaurar; no se pide ningún dato personal y nada queda en el servidor. Las
+posiciones usan costo promedio; las compras que superan el efectivo registrado cuentan como dinero nuevo. El rendimiento
+ponderado por tiempo elimina el efecto de depósitos y retiros. El riesgo usa los pesos de hoy sobre los últimos dos años de
+precios diarios: volatilidad, Sharpe, beta (semanal, vs SPY), caída máxima, VaR y CVaR históricos al 95% (un día) y un VaR
+paramétrico a un mes, correlaciones, contribución al riesgo y concentración (mayores posiciones, número efectivo de
+posiciones, sectores). Un perfil de seis preguntas puntúa por separado la disposición y la capacidad (manda la más baja) y da
+límites guía de volatilidad, caída, peso por empresa y efectivo más bonos. El optimizador es Markowitz solo largo, con
+rendimientos esperados por CAPM y contracción de Ledoit-Wolf de la covarianza: mínima varianza, máximo Sharpe y el portafolio
+de mayor rendimiento dentro de la volatilidad del perfil. Las señales de recomendación salen de estos números; la IA solo las
+explica y la app nunca opera.
+
 #### Límites
 Los datos gratuitos pueden tener demora o fallar por momentos; cada número muestra su horario. La cobertura de la SEC varía
 por empresa. Nada de esto es asesoría de inversión.
 """
+
+# ---------------------------------------------------------------- portfolio and risk management
+ES.update({
+    "Portfolio": "Portafolio", "Overview": "Resumen", "Transactions": "Operaciones", "Risk": "Riesgo",
+    "Investor profile": "Perfil de inversionista", "News impact": "Impacto de noticias", "Optimization": "Optimización",
+    "Recommendations": "Recomendaciones", "Simulator": "Simulador",
+    "Your real positions, their risk, how today's news touches them and what could improve them. Saved only in this browser: download a backup to keep it safe or move it to another device.":
+        "Tus posiciones reales, su riesgo, cómo las afectan las noticias de hoy y qué podría mejorarlas. Se guarda solo en este navegador: descargá un respaldo para conservarlo o pasarlo a otro dispositivo.",
+    "Opening your saved portfolio…": "Abriendo tu portafolio guardado…",
+    "Taking too long? Continue without saved data": "¿Tarda demasiado? Continuar sin datos guardados",
+    "Some saved rows could not be read and were skipped: {p}": "Algunas filas guardadas no se pudieron leer y se omitieron: {p}",
+    "This browser didn't allow saving, so the portfolio lives only while this tab is open. Use the backup file to keep it.":
+        "Este navegador no permitió guardar, así que el portafolio dura mientras esta pestaña esté abierta. Usá el archivo de respaldo para conservarlo.",
+    "Start your portfolio.": "Empezá tu portafolio.",
+    "Add your purchases below (ticker, shares, price and date), or restore a backup file. Nothing personal is asked for: the data stays in this browser. You can also load an example to explore the tools first.":
+        "Cargá tus compras abajo (ticker, cantidad, precio y fecha) o restaurá un archivo de respaldo. No se pide ningún dato personal: la información queda en este navegador. También podés cargar un ejemplo para explorar las herramientas.",
+    "Restore a backup": "Restaurar un respaldo", "Just looking?": "¿Solo mirando?", "Load an example portfolio": "Cargar un portafolio de ejemplo",
+    "Building the example from real prices…": "Armando el ejemplo con precios reales…",
+    "Prices for the example aren't available right now. Try again in a minute.": "Los precios para el ejemplo no están disponibles ahora. Probá en un minuto.",
+    "Total value": "Valor total", "Invested in positions": "Invertido en posiciones", "Cash": "Efectivo",
+    "Unrealized P&L": "Ganancia/pérdida no realizada", "Realized P&L": "Ganancia/pérdida realizada", "Dividends": "Dividendos",
+    "Time-weighted return": "Rendimiento ponderado por tiempo", "S&P 500 same period": "S&P 500 mismo período",
+    "Check these transactions: {p}": "Revisá estas operaciones: {p}",
+    "No live price right now for: {t}. Their value is left out until the quote returns.":
+        "Sin precio en vivo por ahora para: {t}. Su valor queda fuera hasta que vuelva la cotización.",
+    "Positions": "Posiciones", "Ticker": "Ticker", "Allocation by position": "Distribución por posición",
+    "Allocation by sector": "Distribución por sector", "Largest position": "Mayor posición", "Top 3 positions": "3 mayores posiciones",
+    "Effective number of positions": "Número efectivo de posiciones", "Cash share": "Peso del efectivo",
+    "Effective number of positions = 1 / sum of squared weights: 10 equal positions give 10; one dominant position pulls it towards 1.":
+        "Número efectivo de posiciones = 1 / suma de pesos al cuadrado: 10 posiciones iguales dan 10; una posición dominante lo acerca a 1.",
+    "Value over time": "Valor en el tiempo", "Portfolio (time-weighted)": "Portafolio (ponderado por tiempo)",
+    "The time-weighted return removes the effect of money put in or taken out, so it can be compared with the S&P 500. Values use daily closes; purchases funded beyond your recorded cash count as new money.":
+        "El rendimiento ponderado por tiempo quita el efecto del dinero que entra o sale, así se puede comparar con el S&P 500. Los valores usan cierres diarios; las compras que superan el efectivo registrado cuentan como dinero nuevo.",
+    "Price history unavailable right now for: {t}.": "Historial de precios no disponible por ahora para: {t}.",
+    "Add a transaction": "Agregar una operación", "Type": "Tipo", "Date": "Fecha",
+    "Ticker (US-listed stock or ETF)": "Ticker (acción o ETF listado en EE.UU.)", "Shares": "Títulos",
+    "Price per share (USD)": "Precio por título (USD)", "Fees (USD)": "Comisiones (USD)", "Amount (USD)": "Monto (USD)",
+    "Note (optional)": "Nota (opcional)", "Save transaction": "Guardar operación",
+    "Please complete the fields: ticker, shares and price for trades; ticker and amount for dividends; amount for cash.":
+        "Completá los campos: ticker, títulos y precio para compras y ventas; ticker y monto para dividendos; monto para efectivo.",
+    "{t} wasn't found as a US-listed stock or ETF. Check the ticker.": "{t} no se encontró como acción o ETF listado en EE.UU. Revisá el ticker.",
+    "You hold {h} shares of {t}; you can't sell {n}.": "Tenés {h} títulos de {t}; no podés vender {n}.",
+    "Saved": "Guardado", "Backup file (.json)": "Archivo de respaldo (.json)", "Restore this backup": "Restaurar este respaldo",
+    "Restored, skipping rows that were not valid: {p}": "Restaurado, omitiendo filas no válidas: {p}",
+    "That file isn't a Market Brief backup.": "Ese archivo no es un respaldo de Market Brief.",
+    "Cash balance": "Saldo de efectivo", "Cash I have available now (USD)": "Efectivo disponible ahora (USD)", "Update cash": "Actualizar efectivo",
+    "Sets the cash you report; the difference is recorded as a cash adjustment.": "Fija el efectivo que informás; la diferencia se registra como ajuste de efectivo.",
+    "Backup": "Respaldo", "Download backup (.json)": "Descargar respaldo (.json)", "History": "Historial", "Delete": "Borrar",
+    "Amount": "Monto", "Note": "Nota", "Delete selected ({n})": "Borrar seleccionadas ({n})",
+    "Erase all portfolio data from this browser": "Borrar todos los datos del portafolio de este navegador",
+    "This removes every transaction and your investor profile from this browser. Download a backup first if you may need it.":
+        "Esto elimina todas las operaciones y tu perfil de inversionista de este navegador. Descargá un respaldo antes si lo podrías necesitar.",
+    "I understand": "Entiendo", "Erase everything": "Borrar todo",
+    "Buy": "Compra", "Sell": "Venta", "Dividend": "Dividendo", "Deposit": "Depósito", "Withdraw": "Retiro", "Cash Adjust": "Ajuste de efectivo",
+    "Measuring risk on two years of daily prices…": "Midiendo el riesgo con dos años de precios diarios…",
+    "Not enough price history to measure risk yet (it needs about three months of prices for each position).":
+        "Todavía no hay historial suficiente para medir el riesgo (se necesitan unos tres meses de precios por posición).",
+    "Sharpe ratio": "Ratio de Sharpe", "Beta vs S&P 500": "Beta vs S&P 500", "VaR 95%, 1 day": "VaR 95%, 1 día",
+    "CVaR 95%, 1 day": "CVaR 95%, 1 día", "VaR 95%, 1 month": "VaR 95%, 1 mes",
+    "Measured with today's weights over the last {d} trading days of real prices (cash counted as riskless). Past behaviour, not a forecast.":
+        "Medido con los pesos de hoy sobre los últimos {d} días hábiles de precios reales (el efectivo cuenta sin riesgo). Comportamiento pasado, no un pronóstico.",
+    "Left out for lack of price history: {t}.": "Quedan fuera por falta de historial de precios: {t}.",
+    "What drives the risk": "Qué genera el riesgo", "Share of value": "Peso en el valor", "Share of risk": "Peso en el riesgo",
+    "When a position's share of risk is much bigger than its share of value, it is the one making the portfolio bumpy.":
+        "Cuando el peso de una posición en el riesgo es mucho mayor que su peso en el valor, es la que hace más volátil el portafolio.",
+    "What each number means": "Qué significa cada número",
+    "How much the portfolio's value swings in a typical year (standard deviation of returns). Higher = bumpier ride.":
+        "Cuánto oscila el valor del portafolio en un año típico (desvío estándar de los rendimientos). Más alto = más sobresaltos.",
+    "Return earned above the 10-year Treasury per unit of volatility. Above 1 is good, below 0 means cash would have done better.":
+        "Rendimiento por encima del bono del Tesoro a 10 años por unidad de volatilidad. Arriba de 1 es bueno; debajo de 0, el efectivo habría rendido más.",
+    "How strongly the portfolio follows the market: 1 moves with it, 1.3 moves about 30% more, 0.7 about 30% less.":
+        "Cuánto sigue el portafolio al mercado: 1 se mueve igual, 1.3 se mueve cerca de 30% más, 0.7 cerca de 30% menos.",
+    "The worst fall from a peak to a low in the period. It shows the pain you would have had to sit through.":
+        "La peor caída desde un máximo hasta un mínimo en el período. Muestra el mal momento que habrías tenido que aguantar.",
+    "On 19 days out of 20 the daily loss was smaller than this (historical). On the 20th day it was larger.":
+        "En 19 de cada 20 días la pérdida diaria fue menor que esto (histórico). En el día 20 fue mayor.",
+    "The average loss on those worst 1-in-20 days: what a bad day tends to look like.":
+        "La pérdida promedio en ese peor día de cada 20: cómo suele ser un mal día.",
+    "The same idea over a month, estimated from volatility (normal model). A rough guide, not a limit.":
+        "La misma idea para un mes, estimada con la volatilidad (modelo normal). Una guía aproximada, no un límite.",
+    "Correlation between positions": "Correlación entre posiciones", "Drawdown with today’s mix": "Caída desde máximos con la mezcla de hoy",
+    "{t} carries {r} of the portfolio's risk with {w} of its value.": "{t} aporta {r} del riesgo del portafolio con {w} de su valor.",
+    "{a} and {b} move closely together (correlation {c}), so they diversify each other little.":
+        "{a} y {b} se mueven muy parecido (correlación {c}), así que se diversifican poco entre sí.",
+    "A single company, {t}, is {w} of the portfolio: company-specific news can move your whole result.":
+        "Una sola empresa, {t}, es {w} del portafolio: una noticia de esa empresa puede mover todo tu resultado.",
+    "Beta of {b}: in a market fall the portfolio has tended to drop more than the S&P 500.":
+        "Beta de {b}: en las caídas del mercado el portafolio tendió a bajar más que el S&P 500.",
+    "With today's mix the portfolio would have fallen {d} from a peak in the last two years.":
+        "Con la mezcla de hoy, el portafolio habría caído {d} desde un máximo en los últimos dos años.",
+    "No single risk stands out: positions are spread and none dominates the risk.":
+        "Ningún riesgo sobresale: las posiciones están repartidas y ninguna domina el riesgo.",
+    "Six questions. Your answers set a risk profile, and the app checks your real portfolio against it. Willingness (what you want) and capacity (what you can afford) are scored apart: if they disagree, the lower one wins.":
+        "Seis preguntas. Tus respuestas definen un perfil de riesgo y la app compara tu portafolio real contra él. La disposición (lo que querés) y la capacidad (lo que podés afrontar) se puntúan por separado: si no coinciden, manda la más baja.",
+    "What is the main goal of this money?": "¿Cuál es el objetivo principal de este dinero?",
+    "When will you need most of it?": "¿Cuándo vas a necesitar la mayor parte?",
+    "Your portfolio falls 20% in a few weeks. What do you do?": "Tu portafolio cae 20% en pocas semanas. ¿Qué hacés?",
+    "What is the largest one-year loss you could take without it changing your plans?": "¿Cuál es la mayor pérdida en un año que podrías asumir sin cambiar tus planes?",
+    "How much of this money might you need to withdraw soon?": "¿Cuánto de este dinero podrías necesitar retirar pronto?",
+    "What kind of investments do you prefer?": "¿Qué tipo de inversiones preferís?",
+    "Protect what I have": "Proteger lo que tengo", "Steady income": "Ingresos estables", "Balance growth and safety": "Equilibrar crecimiento y seguridad",
+    "Grow my money": "Hacer crecer mi dinero", "Maximise long-term growth": "Maximizar el crecimiento a largo plazo",
+    "Less than 1 year": "Menos de 1 año", "1 to 3 years": "1 a 3 años", "3 to 5 years": "3 a 5 años", "5 to 10 years": "5 a 10 años",
+    "More than 10 years": "Más de 10 años", "Sell everything": "Vendo todo", "Sell part": "Vendo una parte", "Do nothing": "No hago nada",
+    "Buy a little more": "Compro un poco más", "Buy a lot more": "Compro mucho más", "Up to 5%": "Hasta 5%", "Up to 10%": "Hasta 10%",
+    "Up to 20%": "Hasta 20%", "Up to 30%": "Hasta 30%", "40% or more": "40% o más", "Most of it within a year": "La mayor parte dentro de un año",
+    "Part of it within 1–2 years": "Una parte en 1 a 2 años", "Some of it within 3 years": "Algo en 3 años",
+    "Probably none for 5 years": "Probablemente nada en 5 años", "None: this is long-term money": "Nada: es dinero de largo plazo",
+    "Only diversified funds (ETFs)": "Solo fondos diversificados (ETFs)", "Mostly funds, a few stocks": "Mayormente fondos, algunas acciones",
+    "Half funds, half stocks": "Mitad fondos, mitad acciones", "Mostly individual stocks": "Mayormente acciones individuales",
+    "Concentrated bets on individual stocks": "Apuestas concentradas en acciones individuales",
+    "Save my profile": "Guardar mi perfil", "limited by your capacity to take losses": "limitado por tu capacidad de asumir pérdidas",
+    "limited by your willingness to take risk": "limitado por tu disposición a asumir riesgo", "Your profile": "Tu perfil", "Score": "Puntaje",
+    "Willingness / capacity": "Disposición / capacidad", "Guide rails for this profile": "Límites guía para este perfil",
+    "Volatility up to {v} · drawdown up to {d} · one company up to {c} · cash and bonds at least {m}":
+        "Volatilidad hasta {v} · caída hasta {d} · una empresa hasta {c} · efectivo y bonos al menos {m}",
+    "Conservative": "Conservador", "Moderately conservative": "Moderado conservador", "Moderate": "Moderado", "Aggressive": "Agresivo",
+    "Your portfolio against your profile": "Tu portafolio frente a tu perfil",
+    "Mismatch": "Desajuste", "Watch": "Atención", "In line": "En línea",
+    "Volatility is {v}, above the {l} that fits your profile. Expect bigger swings than you said you are comfortable with.":
+        "La volatilidad es {v}, por encima del {l} que corresponde a tu perfil. Esperá oscilaciones mayores de las que dijiste tolerar.",
+    "Volatility is {v}, well below the {l} your profile allows. That is safe, but you may be giving up long-term growth.":
+        "La volatilidad es {v}, bastante debajo del {l} que permite tu perfil. Es seguro, pero quizás estés resignando crecimiento a largo plazo.",
+    "Volatility is {v}, within the {l} that fits your profile.": "La volatilidad es {v}, dentro del {l} que corresponde a tu perfil.",
+    "With today's mix the worst fall in two years was {v}, deeper than the {l} you said you could take.":
+        "Con la mezcla de hoy, la peor caída en dos años fue {v}, más profunda que el {l} que dijiste poder asumir.",
+    "The worst fall in two years with today's mix was {v}, within your {l} tolerance.":
+        "La peor caída en dos años con la mezcla de hoy fue {v}, dentro de tu tolerancia de {l}.",
+    "{t} alone is {v} of the portfolio, above the {l} limit for one company in your profile.":
+        "{t} sola es {v} del portafolio, arriba del límite de {l} por empresa para tu perfil.",
+    "Cash and bonds are {v} of the portfolio; with your liquidity needs and profile at least {l} is advisable.":
+        "El efectivo y los bonos son {v} del portafolio; por tus necesidades de liquidez y tu perfil conviene al menos {l}.",
+    "{s} is {v} of the portfolio: a sector-specific shock would hit a large part of it.":
+        "{s} es {v} del portafolio: un golpe a ese sector afectaría una parte grande.",
+    "Connects the headlines the app already collects (company news, the news desk and macro) with your positions. The AI explains the possible direction and why; it gives no numbers and a negative headline is not a sell signal by itself.":
+        "Conecta los titulares que la app ya reúne (noticias de cada empresa, la mesa de noticias y la macro) con tus posiciones. La IA explica la dirección posible y por qué; no da cifras y un titular negativo no es por sí solo una señal de venta.",
+    "Analyze today's news for my portfolio": "Analizar las noticias de hoy para mi portafolio",
+    "Reading the news against your positions… (20 to 40 seconds)": "Leyendo las noticias frente a tus posiciones… (20 a 40 segundos)",
+    "The AI read couldn't be written this time ({e}). The matched headlines are below.": "La lectura de la IA no se pudo escribir esta vez ({e}). Los titulares relacionados están abajo.",
+    "Macro factors": "Factores macro", "Affects": "Afecta a", "By position": "Por posición", "Review this position": "Revisar esta posición",
+    "What to check.": "Qué revisar.", "{n} related headlines found.": "{n} titulares relacionados.", "No related headlines today.": "Sin titulares relacionados hoy.",
+    "Written {d} ET from {n} headlines. Model interpretation, not investment advice.": "Escrito el {d} ET a partir de {n} titulares. Interpretación del modelo, no asesoría de inversión.",
+    "Positive": "Positivo", "Negative": "Negativo", "Mixed": "Mixto", "Uncertain": "Incierto",
+    "Optimising on two years of prices (the first run can take up to a minute on the free data plan)…":
+        "Optimizando con dos años de precios (la primera vez puede tardar hasta un minuto por el plan gratuito de datos)…",
+    "Also consider diversifiers I don't own (S&P 500, bonds, gold, international and emerging markets ETFs)":
+        "Considerar también diversificadores que no tengo (S&P 500, bonos, oro, ETFs internacionales y emergentes)",
+    "The optimiser needs price history for at least two assets. Add positions or turn on the diversifiers.":
+        "El optimizador necesita historial de precios de al menos dos activos. Agregá posiciones o activá los diversificadores.",
+    "No investor profile saved yet, so a Moderate profile is assumed. Fill in the Investor profile section.":
+        "Todavía no guardaste un perfil, así que se asume uno Moderado. Completá la sección Perfil de inversionista.",
+    "Your portfolio": "Tu portafolio", "Minimum variance": "Mínima varianza", "Maximum Sharpe": "Máximo Sharpe",
+    "Best for your profile ({p})": "El mejor para tu perfil ({p})",
+    "Expected returns come from CAPM (10-year Treasury + beta × 5% equity premium) rather than past returns, which are too noisy to optimise on. Risk uses two years of daily returns with Ledoit-Wolf shrinkage. Long-only; one company is capped at your profile's limit, funds at 60%, gold at 15%. Your portfolio's point includes its cash.":
+        "Los rendimientos esperados salen del CAPM (bono a 10 años + beta × prima de 5%) y no de rendimientos pasados, que son demasiado ruidosos para optimizar. El riesgo usa dos años de rendimientos diarios con contracción de Ledoit-Wolf. Solo posiciones largas; una empresa con tope en el límite de tu perfil, fondos 60%, oro 15%. El punto de tu portafolio incluye su efectivo.",
+    "Expected return": "Rendimiento esperado", "Expected volatility": "Volatilidad esperada", "Expected Sharpe": "Sharpe esperado",
+    "Max drawdown, last 2 years": "Caída máxima, últimos 2 años", "Weights and statistics": "Pesos y estadísticas", "Asset": "Activo",
+    "Which one fits you": "Cuál te conviene",
+    "Even the minimum-variance mix of these assets is riskier than your profile's {tv} volatility guide, so the suggestion is the minimum-variance portfolio. To get closer, hold more cash or bonds.":
+        "Incluso la mezcla de mínima varianza de estos activos es más riesgosa que la guía de volatilidad de {tv} de tu perfil, así que se sugiere el portafolio de mínima varianza. Para acercarte, mantené más efectivo o bonos.",
+    "The suggested portfolio is the one with the highest expected return whose volatility stays within the {tv} that fits a {name} profile: it uses your full risk budget and no more.":
+        "El portafolio sugerido es el de mayor rendimiento esperado cuya volatilidad se mantiene dentro del {tv} que corresponde a un perfil {name}: usa todo tu presupuesto de riesgo y nada más.",
+    "Maximum Sharpe has the best return per unit of risk on paper, but its {v} volatility is above your guide, so it is not the default here.":
+        "El de máximo Sharpe tiene el mejor rendimiento por unidad de riesgo en teoría, pero su volatilidad de {v} supera tu guía, así que acá no es la opción por defecto.",
+    "Maximum Sharpe ({v} volatility) also fits your profile; it is the most efficient mix but leans on the return estimates, which are uncertain.":
+        "El de máximo Sharpe ({v} de volatilidad) también entra en tu perfil; es la mezcla más eficiente pero depende de las estimaciones de rendimiento, que son inciertas.",
+    "Minimum variance ({v}) is the calmest mix, at the cost of a lower expected return.": "La mínima varianza ({v}) es la mezcla más tranquila, a costa de un rendimiento esperado menor.",
+    "Your portfolio today: {v} volatility and {r} expected return.": "Tu portafolio hoy: {v} de volatilidad y {r} de rendimiento esperado.",
+    "Optimisers amplify estimation errors, so treat these weights as a direction, not an exact recipe.":
+        "Los optimizadores amplifican los errores de estimación: tomá estos pesos como una dirección, no como una receta exacta.",
+    "Collecting valuation, analyst and risk data for each position…": "Reuniendo valuación, analistas y riesgo de cada posición…",
+    "Signals are computed by the app from your profile, the optimiser, risk, valuation, analyst ratings and (if you ran it) the news read. The AI then explains them. Nothing is executed: you decide.":
+        "Las señales las calcula la app a partir de tu perfil, el optimizador, el riesgo, la valuación, los analistas y (si lo corriste) la lectura de noticias. Después la IA las explica. No se ejecuta nada: vos decidís.",
+    "Volatility now": "Volatilidad hoy", "After a profile rebalance": "Tras rebalancear al perfil", "Expected return now": "Rendimiento esperado hoy",
+    "Share of the portfolio that would trade": "Parte del portafolio que se operaría", "Signals by position": "Señales por posición",
+    "Weight": "Peso", "Profile target": "Objetivo del perfil", "DCF upside": "Potencial DCF", "Analysts": "Analistas", "Model signal": "Señal del modelo",
+    "Volatility after": "Volatilidad después",
+    "Volatility after = the whole portfolio's expected volatility if only that position moved to its target (cash absorbs the difference). DCF upside uses default assumptions; funds have none.":
+        "Volatilidad después = volatilidad esperada de todo el portafolio si solo esa posición fuera a su objetivo (el efectivo absorbe la diferencia). El potencial DCF usa supuestos por defecto; los fondos no tienen.",
+    "New ideas from the optimiser": "Ideas nuevas del optimizador", "Suggested weight": "Peso sugerido",
+    "Correlation with your portfolio": "Correlación con tu portafolio", "Expected return after": "Rendimiento esperado después", "Sharpe after": "Sharpe después",
+    "Assets you don't own that the profile-optimal portfolio uses, added at up to 10% and funded pro rata from today's positions.":
+        "Activos que no tenés y que usa el portafolio óptimo para tu perfil, agregados hasta 10% y financiados a prorrata con las posiciones actuales.",
+    "Write the recommendations": "Escribir las recomendaciones", "Writing the recommendations… (20 to 40 seconds)": "Escribiendo las recomendaciones… (20 a 40 segundos)",
+    "The recommendations couldn't be written this time ({e}). The computed signals above still apply.":
+        "Las recomendaciones no se pudieron escribir esta vez ({e}). Las señales calculadas arriba siguen valiendo.",
+    "Overall": "En general", "What.": "Qué.", "Why.": "Por qué.", "Data.": "Datos.", "Risk change.": "Cambio en el riesgo.", "Downsides.": "Desventajas.",
+    "Written {d} ET. Model opinion built only from the numbers above; not investment advice. Nothing is bought or sold by the app.":
+        "Escrito el {d} ET. Opinión del modelo construida solo con los números de arriba; no es asesoría de inversión. La app no compra ni vende nada.",
+    "Buy more": "Comprar más", "Reduce": "Reducir", "Rebalance": "Rebalancear", "Add new": "Agregar nueva", "Keep as is": "Mantener como está",
+    "Fine-tune": "Ajustar", "Hold": "Mantener",
+    "Try changes before making them. Edit the target shares (or add a row with a new ticker) and compare risk and expected return before and after. Your saved portfolio is never changed here.":
+        "Probá cambios antes de hacerlos. Editá los títulos objetivo (o agregá una fila con un ticker nuevo) y compará riesgo y rendimiento esperado antes y después. Tu portafolio guardado nunca se modifica acá.",
+    "Fill in the profile-optimal weights": "Completar con los pesos óptimos del perfil", "Shares now": "Títulos hoy", "Target shares": "Títulos objetivo",
+    "Compare before and after": "Comparar antes y después", "Loading prices for the comparison…": "Cargando precios para la comparación…",
+    "Before and after": "Antes y después", "Now": "Hoy", "Simulated": "Simulado", "Value": "Valor",
+    "Expected return (CAPM)": "Rendimiento esperado (CAPM)",
+    "The changes need {m} of new money beyond your cash.": "Los cambios requieren {m} de dinero nuevo además de tu efectivo.",
+    "Portfolio value": "Valor del portafolio", "Money put in (net)": "Dinero aportado (neto)", "Net contributions": "Aportes netos",
+    "Within your profile's risk": "Dentro del riesgo de tu perfil", "Efficient frontier": "Frontera eficiente", "Single assets": "Activos individuales",
+    "risk": "riesgo", "return": "rendimiento", "Expected risk (annual volatility)": "Riesgo esperado (volatilidad anual)",
+    "Expected return (CAPM, annual)": "Rendimiento esperado (CAPM, anual)",
+    "Broad US equity": "Acciones EE.UU. (amplio)", "International equity": "Acciones internacionales", "Emerging markets": "Mercados emergentes",
+    "Avg. cost": "Costo prom.",
+    "Market Brief · data from Finnhub, Twelve Data, FRED, SEC EDGAR, CoinGecko and DolarApi · AI text by Google Gemini · for information and learning, not investment advice.":
+        "Market Brief · datos de Finnhub, Twelve Data, FRED, SEC EDGAR, CoinGecko, DolarApi y Frankfurter · texto de IA de Google Gemini · con fines informativos y de aprendizaje, no es asesoría de inversión.",
+    "Source code": "Código fuente",
+    "Bonds": "Bonos", "Gold & commodities": "Oro y materias primas", "Currency": "Divisas", "Other": "Otro",
+})

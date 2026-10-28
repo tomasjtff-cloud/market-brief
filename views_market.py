@@ -451,6 +451,18 @@ DCF scenarios, DCF sensitivity, the 52-week range and the statistical range agai
 Google Gemini writes the morning note, the news desk read and the stock analysis from the data shown in the app only, with
 instructions not to add facts or set price targets. The stock take gives a Buy / Hold / Sell lean, labeled as a model opinion. The app picks a fast available Gemini model and switches if one is overloaded.
 
+#### Portfolio and risk management
+Your transactions (buys, sells, dividends, deposits and withdrawals) are stored only in your browser's local storage, with a
+JSON backup to download and restore; nothing personal is asked for and nothing is kept on the server. Positions use average
+cost; purchases larger than the recorded cash count as new money. The time-weighted return removes the effect of deposits
+and withdrawals. Risk uses today's weights over the last two years of daily prices: volatility, Sharpe, beta (weekly, vs
+SPY), maximum drawdown, historical VaR and CVaR at 95% (one day) and a parametric one-month VaR, correlations, risk
+contributions and concentration (largest positions, effective number of positions, sectors). A six-question profile scores
+willingness and capacity separately (the lower one sets the profile) and gives guide rails for volatility, drawdown,
+single-company weight and cash plus bonds. The optimiser is long-only Markowitz with CAPM expected returns and Ledoit-Wolf
+shrinkage of the covariance: minimum variance, maximum Sharpe and the highest-return portfolio within the profile's
+volatility. Recommendation signals come from these numbers; the AI only explains them, and the app never trades.
+
 #### Limits
 Free data can be delayed or briefly unavailable; every number shows its time. SEC tag coverage varies by company. Nothing here
 is investment advice.

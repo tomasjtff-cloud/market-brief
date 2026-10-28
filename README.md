@@ -10,6 +10,7 @@ Everything runs on free data sources and free hosting, works on a phone, and the
 |---|---|
 | **Markets** | Index cards with day ranges, sector performance (SPDR ETFs), the US Treasury yield curve vs a month ago with 10Y−2Y and 10Y−3M spreads, Mexico and Argentina (EWW, ARGT, USD/MXN, official, MEP and blue dollar), watchlist rail with sparklines, upcoming earnings, an AI morning note with sources and the latest headlines |
 | **News** | A news desk: headlines by region (USA, Mexico, Argentina, World) and by sector (tech & AI, energy, mining & metals, banks, health care, consumer, industrials & autos, real estate, crypto) from official publisher RSS feeds, exchange rates (ECB reference rates, Argentina's official, MEP, CCL and blue dollars and country risk) and interest rates, with an AI read and a tone for each region and sector |
+| **Portfolio** | Your real portfolio, saved in your own browser (backup file to restore it, no sign-up, no personal data): transactions, value, P&L, allocation and time-weighted return vs the S&P 500; risk (volatility, Sharpe, beta, max drawdown, VaR/CVaR, correlations, risk contributions, concentration); a six-question investor profile checked against the real portfolio; how today's news touches each position (AI read of the app's own headlines); Markowitz optimisation (efficient frontier, minimum variance, maximum Sharpe, best portfolio for your profile); recommendation signals with an AI explanation; and a what-if simulator |
 | **Map** | The 25 largest US companies as a treemap sized by market value and colored by today's move, plus top gainers, decliners and sectors |
 | **Watchlist** | Up to eight stocks in one table: price, returns (1D to 1Y), volatility, beta, max drawdown, 52-week range, 6-month sparkline, P/E, market cap, DCF value, upside and next earnings |
 | **Compare** | Up to six stocks rebased to 100 against SPY and an equal-weight portfolio, with return, volatility, Sharpe, drawdown, beta and a correlation heatmap |
@@ -59,6 +60,9 @@ views_market.py   Markets, Map, Watchlist, Compare and Methodology pages
 views_stock.py    the stock quote page and its sections
 views_news.py     the news desk page
 news.py           news feeds by region and the sector keyword classifier
+portfolio.py      positions, value history, risk metrics, investor profile, Markowitz optimiser (pure Python, tested)
+store.py          keeps the portfolio in the browser's local storage, with backup and restore
+views_portfolio.py the Portfolio page
 charts.py         Plotly charts (price, fan, treemap, yield curve, football field…)
 data.py           all external data sources, with caching and rate limiting
 fundamentals.py   SEC XBRL parsing into revenue, FCF, cash, debt, shares

@@ -364,3 +364,81 @@ def football_field(rows: list[tuple[str, float, float]], price: float) -> go.Fig
     fig.update_yaxes(showgrid=False, showspikes=False, tickfont=dict(size=11, color=p["body"]))
     fig.update_layout(hovermode="closest", margin=dict(l=6, r=10, t=26, b=6))
     return fig
+
+
+# =========================================================================== portfolio
+PIE_COLORS = ["#2F6FED", "#F0954B", "#2FB59A", "#9B7BF2", "#E0B341", "#E1567C", "#4FB3D9", "#8C9AAE", "#6CC070", "#C77DDB",
+              "#D9822B", "#5C7CFA"]
+
+
+def donut(labels: list[str], values: list[float], center: str = "", height: int = 300) -> go.Figure:
+    p = P()
+    fig = go.Figure(go.Pie(labels=labels, values=values, hole=0.62, sort=True, direction="clockwise",
+                           marker=dict(colors=PIE_COLORS[:len(labels)] if len(labels) <= len(PIE_COLORS) else None,
+                                       line=dict(color=p["surface"], width=2)),
+                           textinfo="none", hovertemplate="%{label}: %{percent}<extra></extra>"))
+    fig.update_layout(height=height, margin=dict(l=4, r=4, t=4, b=4), paper_bgcolor="rgba(0,0,0,0)", showlegend=True,
+                      legend=dict(orientation="v", x=1.02, y=0.5, font=dict(size=11, color=p["muted"])),
+                      font=dict(family=FONT, color=p["muted"]),
+                      annotations=[dict(text=center, showarrow=False, font=dict(size=13, color=p["ink"], family=FONT))])
+    return fig
+
+
+def value_history(df: pd.DataFrame, height: int = 330) -> go.Figure:
+    p = P()
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df.index, y=df["value"], mode="lines", name=T("Portfolio value"), line=dict(color=p["accent"], width=2),
+                             fill="tozeroy", fillgradient=dict(type="vertical", colorscale=[[0, _rgba(p["accent"], 0.0)], [1, _rgba(p["accent"], 0.18)]]),
+                             hovertemplate="$%{y:,.0f}<extra>" + T("Value") + "</extra>"))
+    fig.add_trace(go.Scatter(x=df.index, y=df["invested"], mode="lines", name=T("Money put in (net)"), line=dict(color=p["faint"], width=1.4, dash="dot"),
+                             hovertemplate="$%{y:,.0f}<extra>" + T("Net contributions") + "</extra>"))
+    base(fig, height)
+    fig.update_yaxes(tickprefix="$")
+    fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
+    return fig
+
+
+def grouped_bars(cats: list[str], series: list[tuple[str, list[float], str]], height: int = 280, pct: bool = True) -> go.Figure:
+    p = P()
+    fig = go.Figure()
+    for name, vals, key in series:
+        fig.add_trace(go.Bar(x=cats, y=[v * 100 if v is not None else None for v in vals] if pct else vals, name=name,
+                             marker=dict(color=p.get(key, key), cornerradius=3),
+                             hovertemplate="%{x}: %{y:.1f}" + ("%" if pct else "") + "<extra>" + name + "</extra>"))
+    base(fig, height, right_axis=False)
+    fig.update_layout(barmode="group", bargap=0.3, hovermode="closest")
+    if pct:
+        fig.update_yaxes(ticksuffix="%")
+    fig.update_xaxes(showspikes=False)
+    return fig
+
+
+def frontier(opt: dict, points: dict[str, dict], target_vol: float | None, height: int = 460) -> go.Figure:
+    """Efficient frontier, single assets, and the named portfolios (GMV, max Sharpe, profile, current)."""
+    p = P()
+    fig = go.Figure()
+    if target_vol:
+        fig.add_vrect(x0=0, x1=target_vol * 100, fillcolor=_rgba(p["up"], 0.06), line_width=0,
+                      annotation_text=T("Within your profile's risk"), annotation_position="top left",
+                      annotation_font=dict(size=10, color=p["muted"]))
+    fr = sorted(opt["frontier"], key=lambda r: r["vol"])
+    fig.add_trace(go.Scatter(x=[r["vol"] * 100 for r in fr], y=[r["ret"] * 100 for r in fr], mode="lines", name=T("Efficient frontier"),
+                             line=dict(color=p["accent"], width=2.4), hovertemplate=T("Risk") + " %{x:.1f}% · " + T("Return") + " %{y:.1f}%<extra></extra>"))
+    a = opt["assets"]
+    fig.add_trace(go.Scatter(x=[v["vol"] * 100 for v in a.values()], y=[v["ret"] * 100 for v in a.values()], mode="markers+text",
+                             text=list(a), textposition="top center", textfont=dict(size=10, color=p["muted"]), name=T("Single assets"),
+                             marker=dict(size=7, color=p["faint"]), hovertemplate="%{text}: " + T("risk") + " %{x:.1f}%, " + T("return") + " %{y:.1f}%<extra></extra>"))
+    styles = {"current": ("diamond", p["down"], 15), "gmv": ("circle", p["teal"], 13), "max_sharpe": ("star", p["orange"], 17),
+              "profile": ("square", p["up"], 14)}
+    for key, (label, r) in points.items():
+        if not r or r.get("vol") is None:
+            continue
+        sym, col, size = styles.get(key, ("circle", p["ink"], 12))
+        fig.add_trace(go.Scatter(x=[r["vol"] * 100], y=[r["ret"] * 100], mode="markers", name=label,
+                                 marker=dict(symbol=sym, size=size, color=col, line=dict(color=p["surface"], width=1.5)),
+                                 hovertemplate=label + ": " + T("risk") + " %{x:.1f}%, " + T("return") + " %{y:.1f}%<extra></extra>"))
+    base(fig, height, right_axis=False)
+    fig.update_layout(hovermode="closest")
+    fig.update_xaxes(title=dict(text=T("Expected risk (annual volatility)"), font=dict(size=11)), ticksuffix="%", showspikes=False, rangemode="tozero")
+    fig.update_yaxes(title=dict(text=T("Expected return (CAPM, annual)"), font=dict(size=11)), ticksuffix="%", showspikes=False)
+    return fig

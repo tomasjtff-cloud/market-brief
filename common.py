@@ -13,7 +13,7 @@ from ui import esc, link, sgn
 DEFAULT_WATCHLIST = ["AAPL", "NVDA", "MSFT", "GOOGL", "TSLA"]
 MAX_WATCHLIST = 8
 BENCHMARK = "SPY"
-PAGES = {"Markets": "markets", "News": "news", "Map": "map", "Watchlist": "watchlist", "Compare": "compare",
+PAGES = {"Markets": "markets", "News": "news", "Portfolio": "portfolio", "Map": "map", "Watchlist": "watchlist", "Compare": "compare",
          "Stock": "stock", "Methodology": "method"}
 INDEX_ETFS = [("S&P 500", "SPY"), ("Nasdaq 100", "QQQ"), ("Dow Jones", "DIA"), ("Russell 2000", "IWM"),
               ("Gold", "GLD"), ("Crude oil", "USO")]
@@ -126,7 +126,7 @@ def current_page() -> str:
 # =========================================================================== top bar & tape
 def top_bar() -> None:
     with st.container(key="topbar"):
-        c1, c2, c4, c3 = st.columns([1.3, 5.0, 0.85, 1.75], vertical_alignment="center")
+        c1, c2, c4, c3 = st.columns([1.15, 5.5, 0.8, 1.55], vertical_alignment="center")
         c1.html('<div class="mb-logo"><span class="mark">MB</span><span>Market Brief'
                 f'<small>{T("Free markets terminal")}</small></span></div>')
         with c2:

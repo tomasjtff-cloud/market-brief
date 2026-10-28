@@ -327,3 +327,96 @@ def news_view(slot: str, lang: str, _fx_text: str, _buckets: dict) -> dict:
     out = _call(prompt, timeout=50)
     out["generated_at"] = now
     return out
+
+
+# --------------------------------------------------------------------------- portfolio
+IMPACT_PROMPT = """You are a portfolio manager reviewing how today's news may affect a client's positions.
+
+{rules}
+{language}
+- Link each headline only to positions it really concerns (the company itself, its sector, its supply chain, or a macro
+  factor such as rates, the dollar, oil or regulation). Explain the mechanism in plain words.
+- "effect" is the direction the news points to for that position: "Positive", "Negative", "Mixed" or "Uncertain".
+  Do not give numbers for the impact. Negative news is not by itself a reason to sell: say what to check instead.
+- "review" is true only when the news is material enough that the client should look at that position now.
+- If nothing relevant was found for a position, say so in one sentence with effect "Uncertain" and review false.
+
+Return JSON exactly in this shape:
+{{"summary": "3-4 sentences: what today's news means for this portfolio overall",
+  "macro": [{{"factor": "short name", "effect": "...", "why": "1-2 sentences", "affected": ["TICKER"]}}],
+  "positions": [{{"ticker": "TICKER", "effect": "...", "why": "2-3 sentences", "headline_ids": [1, 2], "review": false,
+                 "what_to_check": "1 sentence"}}]}}
+Give 2-5 macro factors and one entry per position listed below.
+
+PORTFOLIO (weights of total value, as of {now})
+{positions}
+
+FX AND RATES
+{fx}
+
+HEADLINES (numbered)
+{headlines}
+"""
+
+
+@st.cache_data(ttl=3 * 3600, show_spinner=False)
+def portfolio_news(signature: str, lang: str, _positions_text: str, _fx_text: str, _headlines: list[dict]) -> dict:
+    lines = [f"[{i}] {h['source']} | {h['time']:%b %d %H:%M} ET | {h['title']}" + (f" — {h['summary'][:200]}" if h.get("summary") else "")
+             + (f"  (matched: {', '.join(h.get('matched', []))})" if h.get("matched") else "")
+             for i, h in enumerate(_headlines, 1)]
+    now = dt.datetime.now(ET)
+    prompt = IMPACT_PROMPT.format(rules=RULES, language=language_rule(lang), now=f"{now:%Y-%m-%d %H:%M} ET",
+                                  positions=_positions_text, fx=_fx_text, headlines="\n".join(lines) or "(none)")
+    out = _call(prompt, timeout=50)
+    for p in out.get("positions", []):
+        p["sources"] = [_headlines[i - 1] for i in p.get("headline_ids", []) if isinstance(i, int) and 1 <= i <= len(_headlines)]
+    out["generated_at"] = now
+    return out
+
+
+ADVICE_PROMPT = """You are a portfolio manager writing recommendations for one client's portfolio.
+
+STRICT RULES
+- Use ONLY the numbers and facts in the data below. Every number you write must appear in the data. No forecasts,
+  no price targets, no invented probabilities.
+- Allowed actions: "Buy more", "Hold", "Reduce", "Sell", "Rebalance", "Add new". The app computed a model signal for
+  each position from the optimiser and the risk rules; follow it unless the data clearly argues otherwise, and say why
+  if you depart from it. Keeping the portfolio as it is can be the right answer: do not recommend trades for their own sake.
+- "Sell" only when several signals agree (far above the profile's limits or optimal weight, weak valuation, negative
+  consensus or news). One bad headline is not enough.
+- For each item explain: what you propose, why, which data support it, how the risk changes (use the computed
+  before/after numbers given), and the downsides or uncertainties.
+- Plain, precise language for a finance graduate. This is a model opinion, not investment advice.
+{language}
+
+Return JSON exactly in this shape:
+{{"overall": {{"stance": "Keep as is" or "Fine-tune" or "Rebalance", "summary": "3-4 sentences"}},
+  "items": [{{"ticker": "TICKER or PORTFOLIO", "action": "...", "what": "1 sentence", "why": "2-3 sentences",
+             "data": "1-2 sentences citing the numbers", "risk_change": "1 sentence with the computed numbers",
+             "downsides": "1-2 sentences"}}]}}
+One item per current position, then one item per new idea listed, then one "PORTFOLIO" item if a rebalance is proposed.
+
+INVESTOR PROFILE
+{profile}
+
+PORTFOLIO RISK NOW AND AFTER THE PROFILE REBALANCE
+{risk}
+
+POSITIONS (computed by the app)
+{positions}
+
+NEW IDEAS (computed by the app: effect of adding each at the stated weight, funded pro rata)
+{ideas}
+
+NEWS READ FOR THE POSITIONS (from the news impact section, may be empty)
+{news}
+"""
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def portfolio_advice(signature: str, lang: str, _profile: str, _risk: str, _positions: str, _ideas: str, _news: str) -> dict:
+    prompt = ADVICE_PROMPT.format(language=language_rule(lang), profile=_profile, risk=_risk, positions=_positions,
+                                  ideas=_ideas, news=_news or "(not generated)")
+    out = _call(prompt, timeout=50)
+    out["generated_at"] = dt.datetime.now(ET)
+    return out
