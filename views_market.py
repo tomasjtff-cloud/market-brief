@@ -463,6 +463,12 @@ single-company weight and cash plus bonds. The optimiser is long-only Markowitz 
 shrinkage of the covariance: minimum variance, maximum Sharpe and the highest-return portfolio within the profile's
 volatility. Recommendation signals come from these numbers; the AI only explains them, and the app never trades.
 
+#### Comparable companies and research
+Peers are the companies Finnhub groups in the same industry. For each multiple (P/E, EV/EBITDA, P/S, P/FCF, P/B, trailing
+twelve months) the app takes the peer median and the value it implies: today's price × peer median ÷ the company's own
+multiple; negative multiples are left out. The Research page publishes pitches kept as files in the repository and measures
+each call from its publication date against the S&P 500 (sign flipped for short calls).
+
 #### Limits
 Free data can be delayed or briefly unavailable; every number shows its time. SEC tag coverage varies by company. Nothing here
 is investment advice.

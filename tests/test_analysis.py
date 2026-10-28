@@ -150,3 +150,14 @@ def test_news_classify():
     assert "Crypto" in news.classify("Bitcoin falls below $80,000")
     assert news.classify("Said the chair in a speech") == []
     assert "Tech & AI" not in news.classify("Paid leave plan advances")  # 'AI' must be the acronym, not part of a word
+
+
+def test_peer_implied_and_parse():
+    own = {"peTTM": 30, "psTTM": 8, "evEbitdaTTM": -5}
+    peers = [{"peTTM": 20, "psTTM": 4, "evEbitdaTTM": 12}, {"peTTM": 25, "psTTM": 6, "evEbitdaTTM": 14}, {"peTTM": -3}]
+    out = analysis.peer_implied(own, peers, 300)
+    assert out["P/E"]["median"] == 22.5 and abs(out["P/E"]["implied"] - 300 * 22.5 / 30) < 1e-9
+    assert out["EV/EBITDA"]["implied"] is None  # own multiple negative: not meaningful
+    import views_research as vr
+    meta, body = vr.parse("---\ntitle: Test: a thesis\nticker: aapl\ndate: 2026-01-05\ncall: long\n---\n## Thesis\nText")
+    assert meta["title"] == "Test: a thesis" and meta["ticker"] == "aapl" and body.startswith("## Thesis")

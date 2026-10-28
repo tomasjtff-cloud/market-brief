@@ -302,3 +302,41 @@ def consensus(row: dict | None) -> dict | None:
              else "Sell" if score >= 1.5 else "Strong Sell")
     return {"score": score, "label": label, "n": n, "period": str(row.get("period", ""))[:7],
             "counts": {k: int(row.get(k, 0) or 0) for k, _ in RATING_KEYS}}
+
+
+
+# --------------------------------------------------------------------------- comparable companies
+COMP_MULTIPLES = {  # label: Finnhub "basic financials" keys, first available wins
+    "P/E": ("peTTM", "peBasicExclExtraTTM", "peExclExtraTTM"),
+    "EV/EBITDA": ("evEbitdaTTM", "enterpriseValueEbitdaTTM", "currentEv/ebitdaTTM"),
+    "P/S": ("psTTM", "priceToSalesTTM"),
+    "P/FCF": ("pfcfShareTTM", "currentEv/freeCashFlowTTM"),
+    "P/B": ("pbQuarterly", "pbAnnual"),
+}
+COMP_QUALITY = {  # Finnhub reports these in percent
+    "Gross margin": ("grossMarginTTM",), "Operating margin": ("operatingMarginTTM",), "Net margin": ("netProfitMarginTTM",),
+    "Revenue growth": ("revenueGrowthTTMYoy",), "ROE": ("roeTTM",),
+}
+
+
+def metric_value(met: dict, keys: tuple[str, ...], positive: bool = False) -> float | None:
+    for k in keys:
+        v = met.get(k)
+        if isinstance(v, (int, float)) and not (isinstance(v, float) and math.isnan(v)):
+            if positive and v <= 0:
+                return None  # a negative multiple is not meaningful (losses)
+            return float(v)
+    return None
+
+
+def peer_implied(own: dict, peer_mets: list[dict], price: float) -> dict[str, dict]:
+    """Peer median of each multiple and the price it implies: price x (peer median / own multiple)."""
+    out = {}
+    for label, keys in COMP_MULTIPLES.items():
+        vals = [v for v in (metric_value(m, keys, positive=True) for m in peer_mets) if v is not None and v < 500]
+        mine = metric_value(own, keys, positive=True)
+        if len(vals) >= 2:
+            med = float(np.median(vals))
+            out[label] = {"median": med, "own": mine, "n": len(vals),
+                          "implied": price * med / mine if mine else None}
+    return out

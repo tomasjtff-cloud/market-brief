@@ -244,7 +244,13 @@ a.mb-card:hover {{ border-color: var(--faint); transform: translateY(-1px); }}
 .mb-tone span {{ color: var(--muted); font-size: 0.72rem; }}
 .mb-tone.up {{ border-left-color: var(--up); }} .mb-tone.down {{ border-left-color: var(--down); }} .mb-tone.hold {{ border-left-color: var(--ai); }}
 
+/* ---------- research ---------- */
+.st-key-panel_rs_body h2, .st-key-panel_rs_preview h2 {{ font-size: 1.08rem !important; font-weight: 700; margin: 1rem 0 0.3rem !important; padding: 0 !important; }}
+.st-key-panel_rs_body h3, .st-key-panel_rs_preview h3 {{ font-size: 0.98rem !important; }}
+.st-key-panel_rs_body p, .st-key-panel_rs_body li {{ font-size: 0.92rem; line-height: 1.6; }}
+
 /* ---------- portfolio ---------- */
+.mb-tbl tr.hl td {{ background: var(--raised); }}
 .mb-check {{ display: flex; gap: 0.8rem; align-items: flex-start; padding: 0.55rem 0; border-bottom: 1px solid var(--soft); }}
 .mb-check:last-child {{ border-bottom: none; }}
 .mb-check .mb-lean {{ flex: none; font-size: 0.78rem; }}

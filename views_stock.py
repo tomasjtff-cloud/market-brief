@@ -310,8 +310,11 @@ def valuation(c: dict) -> dict | None:
     price = q["price"]
     with st.spinner(T("Reading SEC filings…")):
         f = safe(data.company_fundamentals, t)
+    with st.spinner(T("Loading comparable companies…")):
+        comps, implied_peers = peer_comps(t, price, c["met"])
     if not f or f["fcf"].empty or not f["shares"]:
         st.info(T("A DCF isn't available for {t}: it needs SEC filings with free cash flow and a share count (non-US companies, ETFs and funds aren't covered).", t=t))
+        comps_block(c, comps, implied_peers)
         return None
     shares, mcap = f["shares"], price * f["shares"]
     last_year, last_fcf = int(f["fcf"].index[-1]), float(f["fcf"].iloc[-1])
@@ -373,7 +376,7 @@ def valuation(c: dict) -> dict | None:
             (T("DCF sensitivity (WACC ±1, g ±0.5)"), float(np.nanmin(inner)), float(np.nanmax(inner))),
             (T("52-week trading range"), c["low52"], c["high52"]),
             (T("3-month statistical range"), lo3, hi3),
-        ], price), config=charts.CONFIG, key=f"ff_{t}")
+        ] + peer_ff_row(implied_peers), price), config=charts.CONFIG, key=f"ff_{t}_{lang()}")
         st.caption(T("Bear: growth 5 points lower, discount rate 1 point higher. Bull: the opposite."))
         with st.expander(T("Sensitivity table and DCF detail")):
             show = sens.copy()
@@ -398,7 +401,74 @@ def valuation(c: dict) -> dict | None:
         (f"Price / FCF, FY{last_year}", f"{mcap / last_fcf:,.1f}x" if last_fcf > 0 else "n/m", ""),
         ("FCF yield", pct(last_fcf / mcap, signed=False) if last_fcf > 0 else "n/m", ""),
         ("EV / FCF", f"{(mcap + f['net_debt']) / last_fcf:,.1f}x" if last_fcf > 0 else "n/m", "")]))
+    comps_block(c, comps, implied_peers)
     return result
+
+
+# =========================================================================== comparable companies
+def peer_comps(t: str, price: float, own: dict) -> tuple[list[dict], dict]:
+    rows = []
+    for x in (safe(data.peers, t, default=[]) or [])[:7]:
+        met = safe(data.basic_metrics, x, default={}) or {}
+        if not met:
+            continue
+        p = safe(data.profile, x, default={}) or {}
+        cap = (met.get("marketCapitalization") or 0) * 1e6 or p.get("market_cap")
+        rows.append({"ticker": x, "name": p.get("name") or x, "met": met, "cap": cap})
+    return rows, analysis.peer_implied(own or {}, [r["met"] for r in rows], price)
+
+
+def peer_ff_row(implied: dict) -> list[tuple[str, float, float]]:
+    vals = [v["implied"] for k, v in implied.items() if k in ("P/E", "EV/EBITDA", "P/S") and v.get("implied")]
+    return [(T("Peer multiples (P/E, EV/EBITDA, P/S)"), min(vals), max(vals))] if len(vals) >= 2 else []
+
+
+def comps_block(c: dict, comps: list[dict], implied: dict) -> None:
+    t, price = c["t"], c["q"]["price"]
+    st.html(f'<div class="mb-sec">{T("Comparable companies")} {src("mkt")} {src("calc")}</div>')
+    if not comps:
+        st.caption(T("No comparable companies available for {t}.", t=t))
+        return
+    own_cap = (c["met"].get("marketCapitalization") or 0) * 1e6 or c["p"].get("market_cap")
+    mult_keys, qual_keys = list(analysis.COMP_MULTIPLES), list(analysis.COMP_QUALITY)
+
+    def cells(met: dict) -> str:
+        out = ""
+        for k in mult_keys:
+            v = analysis.metric_value(met, analysis.COMP_MULTIPLES[k], positive=True)
+            out += f'<td class="num">{f"{v:,.1f}x" if v is not None and v < 500 else "n/m"}</td>'
+        for k in qual_keys:
+            v = analysis.metric_value(met, analysis.COMP_QUALITY[k])
+            out += f'<td class="num {signed_class(v) if k in ("Revenue growth", "ROE") else ""}">{f"{v:,.1f}%" if v is not None else "n/a"}</td>'
+        return out
+
+    rows = (f'<tr class="hl"><td class="l"><b>{esc(t)}</b><span class="co">{esc(c["p"].get("name") or t)}</span></td>'
+            f'<td class="num">{money(own_cap, 1)}</td>{cells(c["met"])}</tr>')
+    for r in comps:
+        rows += (f'<tr><td class="l"><a href="{link({"p": "stock", "t": r["ticker"]})}" target="_self">{esc(r["ticker"])}</a>'
+                 f'<span class="co">{esc(r["name"])}</span></td><td class="num">{money(r["cap"], 1)}</td>{cells(r["met"])}</tr>')
+    med = ""
+    for k in mult_keys:
+        v = implied.get(k, {}).get("median")
+        med += f'<td class="num"><b>{f"{v:,.1f}x" if v else "–"}</b></td>'
+    for k in qual_keys:
+        vals = [x for x in (analysis.metric_value(r["met"], analysis.COMP_QUALITY[k]) for r in comps) if x is not None]
+        med += f'<td class="num"><b>{f"{float(np.median(vals)):,.1f}%" if len(vals) >= 2 else "–"}</b></td>'
+    rows += f'<tr><td class="l"><b>{T("Peer median")}</b></td><td></td>{med}</tr>'
+    head = "".join(f"<th>{T(h)}</th>" for h in ["Market cap"] + mult_keys + qual_keys)
+    st.html(f'<div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">{T("Company")}</th>{head}</tr>{rows}</table></div>')
+    imp = [(k, v) for k, v in implied.items() if v.get("implied")]
+    if imp:
+        st.html(stat_grid_imp(imp, price))
+    st.html('<p class="mb-foot">' + T("Peers are the companies Finnhub groups in the same industry; multiples are trailing twelve months. Implied value = today's price × peer median ÷ this company's multiple: what the stock would be worth on its peers' valuation. Peers are rarely perfect matches, so read it next to the DCF, not instead of it.") + "</p>")
+
+
+def stat_grid_imp(imp: list[tuple[str, dict]], price: float) -> str:
+    cells = "".join(
+        f'<div class="mb-stat"><div class="k">{T("Value at peer median {m}", m=k)}</div><div class="v num">${v["implied"]:,.2f}</div>'
+        f'<div class="s {signed_class(v["implied"] / price - 1)}">{pct(v["implied"] / price - 1)} {T("vs price")} · '
+        f'{T("{n} peers", n=v["n"])}</div></div>' for k, v in imp)
+    return f'<div class="mb-stats" style="--cols:{len(imp)};margin-top:.6rem">{cells}</div>'
 
 
 # =========================================================================== Outlook

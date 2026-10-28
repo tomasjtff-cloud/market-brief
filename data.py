@@ -129,6 +129,14 @@ def profile(symbol: str) -> dict:
     }
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def peers(symbol: str) -> list[str]:
+    """Companies Finnhub groups with this one (same industry), excluding itself and non-US listings."""
+    rows = _finnhub("/stock/peers", symbol=symbol) or []
+    out = [str(r).upper() for r in rows if isinstance(r, str) and r.upper() != symbol.upper() and "." not in r]
+    return list(dict.fromkeys(out))
+
+
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def basic_metrics(symbol: str) -> dict:
     """Finnhub 'basic financials': 52-week range, P/E, EPS, dividend yield, average volume..."""

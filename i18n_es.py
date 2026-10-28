@@ -326,6 +326,12 @@ rendimientos esperados por CAPM y contracción de Ledoit-Wolf de la covarianza: 
 de mayor rendimiento dentro de la volatilidad del perfil. Las señales de recomendación salen de estos números; la IA solo las
 explica y la app nunca opera.
 
+#### Empresas comparables y research
+Los pares son las empresas que Finnhub agrupa en la misma industria. Para cada múltiplo (P/U, EV/EBITDA, P/V, P/FCF, P/VL,
+últimos doce meses) la app toma la mediana de los pares y el valor que implica: precio de hoy × mediana de pares ÷ múltiplo de
+la empresa; los múltiplos negativos quedan fuera. La página Research publica tesis guardadas como archivos en el repositorio y
+mide cada recomendación desde su publicación contra el S&P 500 (con el signo invertido para ventas en corto).
+
 #### Límites
 Los datos gratuitos pueden tener demora o fallar por momentos; cada número muestra su horario. La cobertura de la SEC varía
 por empresa. Nada de esto es asesoría de inversión.
@@ -538,4 +544,39 @@ ES.update({
         "Market Brief · datos de Finnhub, Twelve Data, FRED, SEC EDGAR, CoinGecko, DolarApi y Frankfurter · texto de IA de Google Gemini · con fines informativos y de aprendizaje, no es asesoría de inversión.",
     "Source code": "Código fuente",
     "Bonds": "Bonos", "Gold & commodities": "Oro y materias primas", "Currency": "Divisas", "Other": "Otro",
+})
+
+# ---------------------------------------------------------------- comps and research
+ES.update({
+    "Loading comparable companies…": "Cargando empresas comparables…", "Comparable companies": "Empresas comparables",
+    "No comparable companies available for {t}.": "No hay empresas comparables disponibles para {t}.",
+    "Peer median": "Mediana de pares", "Peer multiples (P/E, EV/EBITDA, P/S)": "Múltiplos de pares (P/U, EV/EBITDA, P/V)",
+    "P/E": "P/U", "P/S": "P/V", "P/B": "P/VL", "P/FCF": "P/FCF", "EV/EBITDA": "EV/EBITDA", "ROE": "ROE",
+    "Peers are the companies Finnhub groups in the same industry; multiples are trailing twelve months. Implied value = today's price × peer median ÷ this company's multiple: what the stock would be worth on its peers' valuation. Peers are rarely perfect matches, so read it next to the DCF, not instead of it.":
+        "Los pares son las empresas que Finnhub agrupa en la misma industria; los múltiplos son de los últimos doce meses. Valor implícito = precio de hoy × mediana de pares ÷ múltiplo de esta empresa: lo que valdría la acción con la valuación de sus pares. Los pares casi nunca son idénticos, así que leelo junto al DCF, no en su lugar.",
+    "Value at peer median {m}": "Valor a la mediana {m} de pares", "vs price": "vs precio", "{n} peers": "{n} pares",
+    "Research": "Research",
+    "Investment pitches with a live track record: each call is measured against the S&P 500 from the day it was published.":
+        "Tesis de inversión con historial en vivo: cada recomendación se mide contra el S&P 500 desde el día en que se publicó.",
+    "Published pitches": "Tesis publicadas", "Write a pitch": "Escribir una tesis", "No pitches published yet.": "Todavía no hay tesis publicadas.",
+    "Use “Write a pitch” to build one from your own analysis; it produces a file that you upload to the research folder of the repository, and it appears here with its track record.":
+        "Usá “Escribir una tesis” para armar una con tu propio análisis; genera un archivo que subís a la carpeta research del repositorio y aparece acá con su historial.",
+    "Measuring each call since publication…": "Midiendo cada recomendación desde su publicación…", "Pitches": "Tesis",
+    "Beat the S&P 500": "Le ganaron al S&P 500", "Average return of the calls": "Rendimiento promedio de las recomendaciones",
+    "Average excess vs S&P 500": "Exceso promedio vs S&P 500", "Call": "Recomendación", "Price then": "Precio entonces",
+    "Price now": "Precio hoy", "Stock return": "Rendimiento de la acción", "Call vs S&P 500": "Recomendación vs S&P 500", "Target": "Objetivo",
+    "To target": "Hasta el objetivo", "Track record": "Historial", "Pitch": "Tesis",
+    "Call vs S&P 500 = the stock's return minus the index's since the publication date, with the sign flipped for short calls. Prices are not adjusted for dividends.":
+        "Recomendación vs S&P 500 = rendimiento de la acción menos el del índice desde la publicación, con el signo invertido para las ventas en corto. Los precios no se ajustan por dividendos.",
+    "Read a pitch": "Leer una tesis", "Published": "Publicada", "Price then → now": "Precio entonces → hoy", "to go": "por delante",
+    "Long": "Compra (long)", "Short": "Venta (short)", "Neutral": "Neutral",
+    "Write the pitch in your own words. The app fills in the date and today's price, can add a snapshot of the data, and gives you a file to upload to the research folder of the repository. Once uploaded, the pitch is published here and its track record starts.":
+        "Escribí la tesis con tus palabras. La app completa la fecha y el precio de hoy, puede agregar un resumen de datos y te da un archivo para subir a la carpeta research del repositorio. Una vez subido, la tesis se publica acá y empieza su historial.",
+    "Price target (optional)": "Precio objetivo (opcional)", "Horizon": "Horizonte", "Title: your thesis in one line": "Título: tu tesis en una línea",
+    "Author": "Autor", "Thesis": "Tesis", "Business and fundamentals": "Negocio y fundamentales", "Valuation": "Valuación",
+    "Catalysts": "Catalizadores", "Risks": "Riesgos", "Add a data snapshot from the app": "Agregar un resumen de datos de la app",
+    "Build the pitch file": "Armar el archivo de la tesis", "Add at least a title and the thesis.": "Agregá al menos un título y la tesis.",
+    "Preview": "Vista previa", "Download {f}": "Descargar {f}", "Open the research folder on GitHub to upload it": "Abrir la carpeta research en GitHub para subirlo",
+    "On GitHub: drag the file, then “Commit changes”. The app redeploys in about a minute and the pitch appears under Published pitches.":
+        "En GitHub: arrastrá el archivo y después “Commit changes”. La app se actualiza en cerca de un minuto y la tesis aparece en Tesis publicadas.",
 })

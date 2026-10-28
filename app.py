@@ -12,7 +12,7 @@ import streamlit as st
 st.set_page_config(page_title="Market Brief", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
 
 # Streamlit Cloud keeps imported modules between deploys; drop ours if any source file changed.
-_LOCAL = ("i18n_es", "i18n", "ui", "data", "news", "fundamentals", "analysis", "ai", "charts", "common", "views_market", "views_stock", "views_news", "portfolio", "store", "views_portfolio")
+_LOCAL = ("i18n_es", "i18n", "ui", "data", "news", "fundamentals", "analysis", "ai", "charts", "common", "views_market", "views_stock", "views_news", "portfolio", "store", "views_portfolio", "views_research")
 
 
 def _stale() -> bool:
@@ -34,6 +34,7 @@ import views_market as vm  # noqa: E402
 import views_stock as vs  # noqa: E402
 import views_news as vn  # noqa: E402
 import views_portfolio as vp  # noqa: E402
+import views_research as vr  # noqa: E402
 
 for _name in _LOCAL:
     if _name in sys.modules:
@@ -58,6 +59,8 @@ elif page == "Watchlist":
     vm.page_watchlist(wl)
 elif page == "Compare":
     vm.page_compare(wl)
+elif page == "Research":
+    vr.page_research()
 elif page == "Stock":
     vs.page_stock(wl)
 else:
