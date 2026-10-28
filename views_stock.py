@@ -16,6 +16,7 @@ import data
 import fundamentals
 from common import (BENCHMARK, MAX_WATCHLIST, add_to_watchlist, big, get_watchlist, isnum, money, num, pct,
                     remove_from_watchlist, safe, when)
+from i18n import D, T, choice, lang
 from ui import P, chip, esc, link, sgn, signed_class, src
 
 SECTIONS = ["Summary", "Chart", "Financials", "Valuation", "Outlook", "Compare", "News", "Analysts & AI take"]
@@ -34,13 +35,15 @@ def chart_block(t: str, hist: pd.DataFrame, q: dict, key: str, height: int, indi
                 default_range: str = "1Y") -> None:
     c1, c2 = st.columns([3, 1.2], vertical_alignment="center")
     rng = c1.segmented_control("Range", RANGES, default=default_range, key=f"{key}_rng_{t}", label_visibility="collapsed") or default_range
-    kind = c2.segmented_control("Type", ["Area", "Candles"], default="Area", key=f"{key}_kind_{t}", label_visibility="collapsed") or "Area"
+    with c2:
+        kind = choice(st.segmented_control, "Type", ["Area", "Candles"], key=f"{key}_kind_{t}", default="Area",
+                      label_visibility="collapsed") or "Area"
     intraday = rng in ("1D", "5D")
     if intraday:
         interval, size, days = ("5min", 80, 1) if rng == "1D" else ("30min", 70, 5)
         df = safe(data.intraday, t, interval, size)
         if df is None or df.empty:
-            st.caption("Intraday bars aren't available right now; showing one month instead.")
+            st.caption(T("Intraday bars aren't available right now; showing one month instead."))
             intraday, df = False, window(hist, "1M")
         else:
             dates = sorted(set(df.index.date))[-days:]
@@ -56,12 +59,13 @@ def chart_block(t: str, hist: pd.DataFrame, q: dict, key: str, height: int, indi
     if len(df) > 1:
         ref = q.get("prev_close") if rng == "1D" and q.get("prev_close") else float(df["close"].iloc[0])
         ch = float(df["close"].iloc[-1]) / ref - 1
-        st.html(f'<p class="mb-foot">{rng} change <b class="{signed_class(ch)}">{pct(ch, 2)}</b> · '
-                f'{"5-minute" if rng == "1D" else "30-minute" if rng == "5D" else "daily"} bars from Twelve Data {src("mkt")}</p>')
+        bars = T("5-minute bars") if rng == "1D" else T("30-minute bars") if rng == "5D" else T("daily bars")
+        st.html(f'<p class="mb-foot">{T("{r} change", r=rng)} <b class="{signed_class(ch)}">{pct(ch, 2)}</b> · '
+                f'{bars} {T("from Twelve Data")} {src("mkt")}</p>')
 
 
 def kv(rows: list[tuple[str, str]]) -> str:
-    return '<div class="mb-kv">' + "".join(f"<div><span>{esc(k)}</span><span>{v}</span></div>" for k, v in rows) + "</div>"
+    return '<div class="mb-kv">' + "".join(f"<div><span>{esc(T(k))}</span><span>{v}</span></div>" for k, v in rows) + "</div>"
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -87,12 +91,12 @@ def page_stock(wl: list[str]) -> None:
     t = st.session_state.ticker
     q = safe(data.quote, t)
     if not q:
-        st.error(f"No quote found for {t}. Check the ticker or search for the company in the top bar.")
+        st.error(T("No quote found for {t}. Check the ticker or search for the company in the top bar.", t=t))
         return
     p = safe(data.profile, t, default={"name": t, "industry": "", "logo": "", "exchange": ""}) or {"name": t}
     hist = safe(data.history, t)
     if hist is None or len(hist) < 30:
-        st.error(f"Price history for {t} isn't available right now. Try again in a minute.")
+        st.error(T("Price history for {t} isn't available right now. Try again in a minute.", t=t))
         return
     bench = safe(lambda: data.history(BENCHMARK)["close"])
     rf, rf_label = data.risk_free_rate()
@@ -103,25 +107,25 @@ def page_stock(wl: list[str]) -> None:
     # ---- header
     logo = f'<img class="logo" src="{esc(p.get("logo"))}" alt="">' if p.get("logo") else ""
     cls = signed_class(q["pct"])
-    state = "Market open" if status.get("isOpen") else "At close"
+    state = T("Market open") if status.get("isOpen") else T("At close")
     head_l, head_r = st.columns([5, 1.3], vertical_alignment="bottom")
     head_l.html(
         f'<div class="mb-quote"><div class="idt">{logo}<div><div class="co">{esc(p.get("name") or t)}</div>'
         f'<div class="meta"><span class="mb-tag">{esc(t)}</span><span>{esc(p.get("exchange", "")).replace("NASDAQ NMS - GLOBAL MARKET", "Nasdaq")}</span>'
-        f'<span>{esc(p.get("industry", ""))}</span><span>USD</span></div></div></div>'
+        f'<span>{esc(T(p.get("industry") or ""))}</span><span>USD</span></div></div></div>'
         f'<div><span class="px num">{q["price"]:,.2f}</span><span class="chg num {cls}">{sgn(q["change"] or 0, 2, "")} ({sgn(q["pct"] or 0)})</span>'
         f'<div class="asof">{state} · {when(q["time"])} {src("mkt")}</div></div></div>')
     with head_r:
         if t in wl:
-            st.button("✓ In watchlist", key=f"wl_rm_{t}", on_click=remove_from_watchlist, args=(t,), width="stretch",
-                      help="Click to remove from the watchlist", disabled=len(wl) == 1)
+            st.button(T("✓ In watchlist"), key=f"wl_rm_{t}", on_click=remove_from_watchlist, args=(t,), width="stretch",
+                      help=T("Click to remove from the watchlist"), disabled=len(wl) == 1)
         elif len(wl) < MAX_WATCHLIST:
-            st.button("+ Add to watchlist", key=f"wl_add_{t}", on_click=add_to_watchlist, args=(t,), type="primary", width="stretch")
+            st.button(T("+ Add to watchlist"), key=f"wl_add_{t}", on_click=add_to_watchlist, args=(t,), type="primary", width="stretch")
 
     high52 = met.get("52WeekHigh") or float(hist["close"].iloc[-252:].max())
     low52 = met.get("52WeekLow") or float(hist["close"].iloc[-252:].min())
     st.html(f'<div class="mb-stats" style="--cols:8">' + "".join(
-        f'<div class="mb-stat"><div class="k">{k}</div><div class="v num {c}">{v}</div></div>' for k, v, c in [
+        f'<div class="mb-stat"><div class="k">{T(k)}</div><div class="v num {c}">{v}</div></div>' for k, v, c in [
             ("Market cap", money(p.get("market_cap"), 2), ""),
             ("P/E (TTM)", num(met.get("peTTM"), 1, "x") if (met.get("peTTM") or 0) > 0 else "n/m", ""),
             ("EPS (TTM)", f'${met["epsTTM"]:,.2f}' if isnum(met.get("epsTTM")) else "n/a", ""),
@@ -132,7 +136,8 @@ def page_stock(wl: list[str]) -> None:
             ("52-week range", f"{low52:,.0f} – {high52:,.0f}", ""),
         ]) + "</div>")
 
-    section = st.segmented_control("Section", SECTIONS, default="Summary", key=f"sec_{t}", label_visibility="collapsed") or "Summary"
+    section = choice(st.segmented_control, "Section", SECTIONS, key=f"sec_{t}", default="Summary",
+                     label_visibility="collapsed") or "Summary"
     st.html('<div style="height:.2rem"></div>')
     ctx = {"t": t, "q": q, "p": p, "hist": hist, "bench": bench, "rf": rf, "rf_label": rf_label, "m": m, "met": met,
            "high52": high52, "low52": low52, "wl": wl}
@@ -161,11 +166,11 @@ def summary(c: dict) -> None:
             ("Beta (2Y weekly)", num(m["beta"])),
             ("P/E (TTM)", num(met.get("peTTM"), 2) if (met.get("peTTM") or 0) > 0 else "n/m"),
             ("EPS (TTM)", f'{met["epsTTM"]:,.2f}' if isnum(met.get("epsTTM")) else "n/a"),
-            ("Dividend yield", f"{dy:.2f}%" if isnum(dy) and dy else "None"),
-            ("Next earnings", f'{dt.date.fromisoformat(e["date"]):%b %-d, %Y}' if e else "n/a"),
+            ("Dividend yield", f"{dy:.2f}%" if isnum(dy) and dy else T("None")),
+            ("Next earnings", D(dt.date.fromisoformat(e["date"]), "%b %-d, %Y") if e else "n/a"),
             ("Sharpe (1Y)", num(m["sharpe"])),
         ]
-        st.html(f'<div class="mb-panel"><div class="mb-h"><b>Key statistics</b><span>{src("mkt")} {src("calc")}</span></div>'
+        st.html(f'<div class="mb-panel"><div class="mb-h"><b>{T("Key statistics")}</b><span>{src("mkt")} {src("calc")}</span></div>'
                 + kv(rows).replace('class="mb-kv"', 'class="mb-kv" style="grid-template-columns:1fr"') + "</div>")
 
     a, b, c3 = st.columns([1.15, 1.15, 1], gap="small")
@@ -182,33 +187,33 @@ def summary(c: dict) -> None:
             if r1 is None:
                 continue
             rel = (r1 - r2) if r2 is not None else None
-            rows += (f'<tr><td class="l">{label}</td><td class="num {signed_class(r1)}">{pct(r1)}</td>'
+            rows += (f'<tr><td class="l">{T(label)}</td><td class="num {signed_class(r1)}">{pct(r1)}</td>'
                      f'<td class="num {signed_class(r2)}">{pct(r2)}</td><td class="num {signed_class(rel)}">{pct(rel)}</td></tr>')
-        st.html(f'<div class="mb-panel"><div class="mb-h"><b>Performance vs S&amp;P 500</b><span>{src("calc")}</span></div>'
-                f'<table class="mb-tbl"><tr><th class="l">Period</th><th>{esc(t)}</th><th>SPY</th><th>Difference</th></tr>{rows}</table></div>')
+        st.html(f'<div class="mb-panel"><div class="mb-h"><b>{T("Performance vs S&amp;P 500")}</b><span>{src("calc")}</span></div>'
+                f'<table class="mb-tbl"><tr><th class="l">{T("Period")}</th><th>{esc(t)}</th><th>SPY</th><th>{T("Difference")}</th></tr>{rows}</table></div>')
     with b:
         with st.container(key="panel_recs"):
-            st.html(f'<div class="mb-h"><b>Analyst ratings</b><span>{src("ana")}</span></div>')
+            st.html(f'<div class="mb-h"><b>{T("Analyst ratings")}</b><span>{src("ana")}</span></div>')
             recs = safe(data.recommendations, t, default=[])
             if recs:
                 st.plotly_chart(charts.recommendations(recs), config=charts.CONFIG, key=f"recs_{t}")
                 cs = analysis.consensus(recs[0])
                 if cs:
                     bulls = (cs["counts"]["strongBuy"] + cs["counts"]["buy"]) / cs["n"]
-                    st.html(f'<p class="mb-foot">Consensus <b>{cs["label"]}</b> ({cs["score"]:.2f} / 5) from {cs["n"]} analysts, '
-                            f'{bulls:.0%} buy or strong buy ({cs["period"]}). Sell-side ratings lean positive in general.</p>')
+                    st.html('<p class="mb-foot">' + T("Consensus <b>{l}</b> ({s} / 5) from {n} analysts, {b} buy or strong buy ({p}). Sell-side ratings lean positive in general.",
+                                                      l=T(cs["label"]), s=f'{cs["score"]:.2f}', n=cs["n"], b=f"{bulls:.0%}", p=cs["period"]) + "</p>")
             else:
-                st.caption("No analyst ratings available.")
+                st.caption(T("No analyst ratings available."))
     with c3:
         ma50, ma200 = hist["close"].rolling(50).mean().iloc[-1], hist["close"].rolling(200).mean().iloc[-1]
         price = q["price"]
         lv = [("52-week high", c["high52"]), ("50-day average", ma50), ("200-day average", ma200), ("52-week low", c["low52"])]
-        rows = "".join(f'<tr><td class="l">{n}</td><td class="num">{v:,.2f}</td><td class="num {signed_class(price / v - 1)}">{pct(price / v - 1)}</td></tr>'
+        rows = "".join(f'<tr><td class="l">{T(n)}</td><td class="num">{v:,.2f}</td><td class="num {signed_class(price / v - 1)}">{pct(price / v - 1)}</td></tr>'
                        for n, v in lv if isnum(v))
         prof = c["p"]
-        st.html(f'<div class="mb-panel"><div class="mb-h"><b>Key levels</b><span>{src("calc")}</span></div>'
-                f'<table class="mb-tbl"><tr><th class="l">Level</th><th>Price</th><th>Price vs level</th></tr>{rows}</table></div>'
-                f'<div class="mb-panel" style="margin-top:.6rem"><div class="mb-h"><b>Profile</b></div>' + kv([
+        st.html(f'<div class="mb-panel"><div class="mb-h"><b>{T("Key levels")}</b><span>{src("calc")}</span></div>'
+                f'<table class="mb-tbl"><tr><th class="l">{T("Level")}</th><th>{T("Price")}</th><th>{T("Price vs level")}</th></tr>{rows}</table></div>'
+                f'<div class="mb-panel" style="margin-top:.6rem"><div class="mb-h"><b>{T("Profile")}</b></div>' + kv([
                     ("Industry", esc(prof.get("industry") or "n/a")), ("Country", esc(prof.get("country") or "n/a")),
                     ("Listed since", esc(prof.get("ipo") or "n/a")),
                     ("Website", f'<a href="{esc(prof.get("web"))}" target="_blank" rel="noopener">{esc((prof.get("web") or "").replace("https://", "").replace("http://", "").strip("/"))}</a>' if prof.get("web") else "n/a"),
@@ -218,41 +223,42 @@ def summary(c: dict) -> None:
 # =========================================================================== Chart
 def chart_section(c: dict) -> None:
     t, hist, q, m = c["t"], c["hist"], c["q"], c["m"]
-    ind = st.pills("Indicators", ["50-day", "200-day", "Bollinger", "RSI", "±1σ range ahead"], selection_mode="multi",
-                   default=["50-day", "200-day"], key=f"ind_{t}", label_visibility="collapsed") or []
+    ind = choice(st.pills, "Indicators", ["50-day", "200-day", "Bollinger", "RSI", "±1σ range ahead"], key=f"ind_{t}",
+                 default=["50-day", "200-day"], multi=True, label_visibility="collapsed") or []
     chart_block(t, hist, q, "big", 600, indicators=tuple(ind), cone=m["volatility"] if "±1σ range ahead" in ind else None)
     a, b = st.columns([1, 1.1], gap="medium")
     with a:
-        st.html(f'<div class="mb-sec">How far it usually moves {src("calc")}</div>')
+        st.html(f'<div class="mb-sec">{T("How far it usually moves")} {src("calc")}</div>')
         if m["volatility"]:
             rows = ""
             for label, days in (("1 month", 21), ("3 months", 63), ("6 months", 126)):
                 lo1, hi1 = analysis.statistical_range(q["price"], m["volatility"], days)
                 s = m["volatility"] * np.sqrt(days / analysis.TRADING_DAYS) * 1.96
-                rows += (f'<tr><td class="l">{label}</td><td class="num">{lo1:,.2f} – {hi1:,.2f}</td>'
+                rows += (f'<tr><td class="l">{T(label)}</td><td class="num">{lo1:,.2f} – {hi1:,.2f}</td>'
                          f'<td class="num">{q["price"] * np.exp(-s):,.2f} – {q["price"] * np.exp(s):,.2f}</td></tr>')
-            st.html(f'<div class="mb-panel"><table class="mb-tbl"><tr><th class="l">Horizon</th><th>2 in 3 outcomes</th>'
-                    f'<th>19 in 20 outcomes</th></tr>{rows}</table></div><p class="mb-foot">Normal model on last year\'s volatility '
-                    f'({pct(m["volatility"], signed=False)} a year), no drift. The Outlook section uses real past moves instead.</p>')
+            st.html(f'<div class="mb-panel"><table class="mb-tbl"><tr><th class="l">{T("Horizon")}</th><th>{T("2 in 3 outcomes")}</th>'
+                    f'<th>{T("19 in 20 outcomes")}</th></tr>{rows}</table></div><p class="mb-foot">'
+                    + T("Normal model on last year's volatility ({v} a year), no drift. The Outlook section uses real past moves instead.",
+                        v=pct(m["volatility"], signed=False)) + "</p>")
         st.html(stats_row([("Max drawdown, 1Y", pct(m["max_drawdown"]), "neg"), ("Sharpe, 1Y", num(m["sharpe"]), ""),
                            ("Beta vs SPY", num(m["beta"]), ""), ("RSI (14)", num(charts.rsi(hist["close"]).iloc[-1], 0), "")]))
     with b:
-        st.html(f'<div class="mb-sec">Drawdown, last year {src("calc")}</div>')
+        st.html(f'<div class="mb-sec">{T("Drawdown, last year")} {src("calc")}</div>')
         st.plotly_chart(charts.drawdown(hist["close"]), config=charts.CONFIG, key=f"dd_{t}")
 
 
 def stats_row(items: list[tuple[str, str, str]]) -> str:
     return (f'<div class="mb-stats" style="--cols:{len(items)};margin-top:.6rem">' + "".join(
-        f'<div class="mb-stat"><div class="k">{k}</div><div class="v num {cl}">{v}</div></div>' for k, v, cl in items) + "</div>")
+        f'<div class="mb-stat"><div class="k">{T(k)}</div><div class="v num {cl}">{v}</div></div>' for k, v, cl in items) + "</div>")
 
 
 # =========================================================================== Financials
 def financials(c: dict) -> None:
     t = c["t"]
-    with st.spinner("Reading SEC filings…"):
+    with st.spinner(T("Reading SEC filings…")):
         f = safe(data.company_fundamentals, t)
     if not f or f["revenue"].empty:
-        st.info(f"Reported financials aren't available for {t} (non-US filers, ETFs and funds don't file 10-Ks).")
+        st.info(T("Reported financials aren't available for {t} (non-US filers, ETFs and funds don't file 10-Ks).", t=t))
         return
     years = sorted(set(f["revenue"].index) | set(f["fcf"].index))[-6:]
     g = lambda s, y: float(s[y]) if y in s.index else None  # noqa: E731
@@ -266,7 +272,7 @@ def financials(c: dict) -> None:
                 cells.append(f'<td class="num">{f"${v:,.2f}" if v is not None else "n/a"}</td>')
             else:
                 cells.append(f'<td class="num {signed_class(v) if kind == "growth" else ""}">{pct(v, 1, kind == "growth") if v is not None else "n/a"}</td>')
-        return f'<tr><td class="l">{label}</td>{"".join(cells)}</tr>'
+        return f'<tr><td class="l">{T(label)}</td>{"".join(cells)}</tr>'
 
     rev = f["revenue"]
     ratio = lambda a: (a / rev).dropna() if not a.empty else pd.Series(dtype=float)  # noqa: E731
@@ -278,63 +284,62 @@ def financials(c: dict) -> None:
         row("Operating margin", ratio(f["operating_income"]), "ratio"), row("Net margin", ratio(f["net_income"]), "ratio"),
         row("FCF margin", ratio(f["fcf"]), "ratio"),
     ])
-    st.html(f'<div class="mb-sec">Annual financials {src("rep")}</div><div class="mb-scroll"><table class="mb-tbl">'
-            f'<tr><th class="l">Fiscal year</th>{"".join(f"<th>{y}</th>" for y in years)}</tr>{body}</table></div>'
-            f'<p class="mb-foot">From 10-K filings (XBRL), calendar-aligned fiscal years. Balance sheet as of {f["balance_sheet_date"]}: '
-            f'cash and short-term investments {money(f["cash"], 1)}, debt {money(f["debt"], 1)}, net debt {money(f["net_debt"], 1)}.</p>')
+    st.html(f'<div class="mb-sec">{T("Annual financials")} {src("rep")}</div><div class="mb-scroll"><table class="mb-tbl">'
+            f'<tr><th class="l">{T("Fiscal year")}</th>{"".join(f"<th>{y}</th>" for y in years)}</tr>{body}</table></div><p class="mb-foot">'
+            + T("From 10-K filings (XBRL), calendar-aligned fiscal years. Balance sheet as of {d}: cash and short-term investments {c}, debt {debt}, net debt {nd}.",
+                d=f["balance_sheet_date"], c=money(f["cash"], 1), debt=money(f["debt"], 1), nd=money(f["net_debt"], 1)) + "</p>")
     for note in f["notes"]:
-        st.caption(f"Note: {note}")
+        st.caption(T("Note: ") + note)
     b = lambda s: [g(s, y) / 1e9 if g(s, y) is not None else None for y in years]  # noqa: E731
     a1, a2 = st.columns(2, gap="medium")
     with a1:
-        st.html('<div class="mb-sec">Revenue, profit and cash</div>')
-        st.plotly_chart(charts.financial_bars(years, [("Revenue", b(rev), "accent"), ("Net income", b(f["net_income"]), "teal"),
-                                                      ("Free cash flow", b(f["fcf"]), "orange")]), config=charts.CONFIG, key=f"fin_{t}")
+        st.html(f'<div class="mb-sec">{T("Revenue, profit and cash")}</div>')
+        st.plotly_chart(charts.financial_bars(years, [(T("Revenue"), b(rev), "accent"), (T("Net income"), b(f["net_income"]), "teal"),
+                                                      (T("Free cash flow"), b(f["fcf"]), "orange")]), config=charts.CONFIG, key=f"fin_{t}_{lang()}")
     with a2:
-        st.html('<div class="mb-sec">Margins</div>')
+        st.html(f'<div class="mb-sec">{T("Margins")}</div>')
         mg = lambda s: [(g(ratio(s), y) or np.nan) * 100 if g(ratio(s), y) is not None else None for y in years]  # noqa: E731
-        st.plotly_chart(charts.margin_lines(years, [("Gross", mg(f["gross_profit"]), "accent"), ("Operating", mg(f["operating_income"]), "violet"),
-                                                    ("Net", mg(f["net_income"]), "teal"), ("FCF", mg(f["fcf"]), "orange")]),
-                        config=charts.CONFIG, key=f"mg_{t}")
+        st.plotly_chart(charts.margin_lines(years, [(T("Gross"), mg(f["gross_profit"]), "accent"), (T("Operating"), mg(f["operating_income"]), "violet"),
+                                                    (T("Net"), mg(f["net_income"]), "teal"), ("FCF", mg(f["fcf"]), "orange")]),
+                        config=charts.CONFIG, key=f"mg_{t}_{lang()}")
 
 
 # =========================================================================== Valuation
 def valuation(c: dict) -> dict | None:
     t, q, m, rf, rf_label, hist = c["t"], c["q"], c["m"], c["rf"], c["rf_label"], c["hist"]
     price = q["price"]
-    with st.spinner("Reading SEC filings…"):
+    with st.spinner(T("Reading SEC filings…")):
         f = safe(data.company_fundamentals, t)
     if not f or f["fcf"].empty or not f["shares"]:
-        st.info(f"A DCF isn't available for {t}: it needs SEC filings with free cash flow and a share count "
-                "(non-US companies, ETFs and funds aren't covered).")
+        st.info(T("A DCF isn't available for {t}: it needs SEC filings with free cash flow and a share count (non-US companies, ETFs and funds aren't covered).", t=t))
         return None
     shares, mcap = f["shares"], price * f["shares"]
     last_year, last_fcf = int(f["fcf"].index[-1]), float(f["fcf"].iloc[-1])
     eps = float(f["eps"].iloc[-1]) if not f["eps"].empty else None
     d = dcf_defaults(f, m, rf, price)
 
-    with st.expander("DCF assumptions — change them and everything below updates", expanded=False):
+    with st.expander(T("DCF assumptions — change them and everything below updates"), expanded=False):
         a1, a2, a3 = st.columns(3)
-        base_choice = a1.radio("Starting free cash flow", ["Latest year", "3-year average"], key=f"base_{t}", horizontal=True)
-        growth = a2.slider("FCF growth, years 1 to 5 (%)", -10.0, 40.0, round(d["growth"] * 100, 1), 0.5, key=f"g_{t}") / 100
-        g_term = a3.slider("Terminal growth (%)", 0.0, 4.0, 2.5, 0.1, key=f"gt_{t}") / 100
+        base_choice = choice(a1.radio, T("Starting free cash flow"), ["Latest year", "3-year average"], key=f"base_{t}", default="Latest year", horizontal=True)
+        growth = a2.slider(T("FCF growth, years 1 to 5 (%)"), -10.0, 40.0, round(d["growth"] * 100, 1), 0.5, key=f"g_{t}") / 100
+        g_term = a3.slider(T("Terminal growth (%)"), 0.0, 4.0, 2.5, 0.1, key=f"gt_{t}") / 100
         b1, b2, b3, b4 = st.columns(4)
-        erp = b1.number_input("Equity risk premium (%)", 3.0, 8.0, 5.0, 0.25, key=f"erp_{t}") / 100
+        erp = b1.number_input(T("Equity risk premium (%)"), 3.0, 8.0, 5.0, 0.25, key=f"erp_{t}") / 100
         beta_in = b2.number_input("Beta", 0.3, 3.0, round(d["beta"], 2), 0.05, key=f"beta_{t}")
-        kd = b3.number_input("Pre-tax cost of debt (%)", 1.0, 12.0, round((rf + 0.015) * 100, 2), 0.25, key=f"kd_{t}") / 100
-        tax = b4.number_input("Tax rate (%)", 0.0, 35.0, 21.0, 1.0, key=f"tax_{t}") / 100
+        kd = b3.number_input(T("Pre-tax cost of debt (%)"), 1.0, 12.0, round((rf + 0.015) * 100, 2), 0.25, key=f"kd_{t}") / 100
+        tax = b4.number_input(T("Tax rate (%)"), 0.0, 35.0, 21.0, 1.0, key=f"tax_{t}") / 100
         w = analysis.wacc(rf, beta_in, erp, kd, tax, mcap, f["debt"])
-        discount = st.slider("Discount rate used (WACC, %)", 4.0, 16.0, round(w["wacc"] * 100, 1), 0.1,
+        discount = st.slider(T("Discount rate used (WACC, %)"), 4.0, 16.0, round(w["wacc"] * 100, 1), 0.1,
                              key=f"wacc_{t}_{round(w['wacc'] * 100, 1)}") / 100
         base_fcf = last_fcf if base_choice == "Latest year" else float(f["fcf"].iloc[-3:].mean())
-        st.caption(f"Starting FCF {money(base_fcf)}. Default growth = last five years' revenue CAGR "
-                   f"({pct(d['hist_g']) if d['hist_g'] is not None else 'n/a'}) capped at 0 to 20%; years 6 to 10 fade to terminal growth. "
-                   f"Cost of equity {pct(rf, 2, False)} + {beta_in:.2f} × {pct(erp, 2, False)} = {pct(w['cost_of_equity'], 2, False)}; "
-                   f"weights {pct(w['we'], 0, False)} equity / {pct(w['wd'], 0, False)} debt; WACC {pct(w['wacc'], 2, False)}. {rf_label}.")
+        st.caption(T("Starting FCF {fcf}. Default growth = last five years' revenue CAGR ({g}) capped at 0 to 20%; years 6 to 10 fade to terminal growth. Cost of equity {rf} + {b} × {erp} = {ke}; weights {we} equity / {wd} debt; WACC {w}. {rfl}.",
+                       fcf=money(base_fcf), g=pct(d['hist_g']) if d['hist_g'] is not None else 'n/a', rf=pct(rf, 2, False), b=f"{beta_in:.2f}",
+                       erp=pct(erp, 2, False), ke=pct(w['cost_of_equity'], 2, False), we=pct(w['we'], 0, False), wd=pct(w['wd'], 0, False),
+                       w=pct(w['wacc'], 2, False), rfl=rf_label))
 
     result = {"fundamentals": f, "mcap": mcap, "eps": eps, "last_year": last_year}
     if base_fcf <= 0:
-        st.info("Free cash flow is negative, so a cash-flow DCF doesn't apply. Revenue growth and the path to profitability are the better lens.")
+        st.info(T("Free cash flow is negative, so a cash-flow DCF doesn't apply. Revenue growth and the path to profitability are the better lens."))
     else:
         try:
             base = analysis.dcf(base_fcf, growth, g_term, discount, f["net_debt"], shares)
@@ -347,48 +352,48 @@ def valuation(c: dict) -> dict | None:
         implied = analysis.implied_growth(price, base_fcf, g_term, discount, f["net_debt"], shares)
         pal = P()
         color = pal["up"] if label == "Looks undervalued" else pal["down"] if label == "Looks overvalued" else pal["muted"]
-        st.html(f'<div class="mb-verdict"><div><div class="k">Intrinsic value per share {src("calc")}</div><div class="v num">${base.per_share:,.2f}</div>'
-                f'<div class="k">Bear ${bear.per_share:,.0f} · Bull ${bull.per_share:,.0f}</div></div>'
-                f'<div><div class="k">Market price {src("mkt")}</div><div class="v num">${price:,.2f}</div>'
-                f'<div class="k">Upside to intrinsic value <b style="color:{color}">{pct(gap)}</b></div></div>'
-                f'<div><div class="k">Verdict under these assumptions</div><div class="label" style="color:{color}">{label}</div>'
-                f'<div class="k">Within ±15% counts as fairly valued</div></div></div>')
+        st.html(f'<div class="mb-verdict"><div><div class="k">{T("Intrinsic value per share")} {src("calc")}</div><div class="v num">${base.per_share:,.2f}</div>'
+                f'<div class="k">{T("Bear")} ${bear.per_share:,.0f} · {T("Bull")} ${bull.per_share:,.0f}</div></div>'
+                f'<div><div class="k">{T("Market price")} {src("mkt")}</div><div class="v num">${price:,.2f}</div>'
+                f'<div class="k">{T("Upside to intrinsic value")} <b style="color:{color}">{pct(gap)}</b></div></div>'
+                f'<div><div class="k">{T("Verdict under these assumptions")}</div><div class="label" style="color:{color}">{T(label)}</div>'
+                f'<div class="k">{T("Within ±15% counts as fairly valued")}</div></div></div>')
         if implied is not None:
-            st.html(f'<div class="mb-callout"><b>What the price implies.</b> To be worth ${price:,.2f}, free cash flow would need to grow about '
-                    f'<b>{pct(implied)} a year for five years</b>, then fade to {pct(g_term, 1, False)}, at a {pct(discount, 1, False)} '
-                    f'discount rate. Revenue grew {pct(d["hist_g"]) if d["hist_g"] is not None else "n/a"} a year over the last five years.</div>')
+            st.html('<div class="mb-callout">' + T("<b>What the price implies.</b> To be worth ${p}, free cash flow would need to grow about <b>{g} a year for five years</b>, then fade to {gt}, at a {d} discount rate. Revenue grew {h} a year over the last five years.",
+                    p=f"{price:,.2f}", g=pct(implied), gt=pct(g_term, 1, False), d=pct(discount, 1, False),
+                    h=pct(d["hist_g"]) if d["hist_g"] is not None else "n/a") + "</div>")
         rates = [round(discount + x, 4) for x in (-0.02, -0.01, 0.0, 0.01, 0.02)]
         terms = [round(g_term + x, 4) for x in (-0.01, -0.005, 0.0, 0.005, 0.01)]
         sens = analysis.sensitivity(base_fcf, growth, f["net_debt"], shares, rates, terms)
         inner = sens.loc[rates[1:4], terms[1:4]].to_numpy()
         lo3, hi3 = analysis.statistical_range(price, m["volatility"], 63) if m["volatility"] else (None, None)
-        st.html(f'<div class="mb-sec">Valuation ranges (football field) {src("calc")}</div>')
+        st.html(f'<div class="mb-sec">{T("Valuation ranges (football field)")} {src("calc")}</div>')
         st.plotly_chart(charts.football_field([
-            ("DCF scenarios, bear to bull", bear.per_share, bull.per_share),
-            ("DCF sensitivity (WACC ±1, g ±0.5)", float(np.nanmin(inner)), float(np.nanmax(inner))),
-            ("52-week trading range", c["low52"], c["high52"]),
-            ("3-month statistical range", lo3, hi3),
+            (T("DCF scenarios, bear to bull"), bear.per_share, bull.per_share),
+            (T("DCF sensitivity (WACC ±1, g ±0.5)"), float(np.nanmin(inner)), float(np.nanmax(inner))),
+            (T("52-week trading range"), c["low52"], c["high52"]),
+            (T("3-month statistical range"), lo3, hi3),
         ], price), config=charts.CONFIG, key=f"ff_{t}")
-        st.caption("Bear: growth 5 points lower, discount rate 1 point higher. Bull: the opposite.")
-        with st.expander("Sensitivity table and DCF detail"):
+        st.caption(T("Bear: growth 5 points lower, discount rate 1 point higher. Bull: the opposite."))
+        with st.expander(T("Sensitivity table and DCF detail")):
             show = sens.copy()
             show.index = [pct(r, 1, False) for r in show.index]
             show.columns = [pct(gg, 1, False) for gg in show.columns]
-            st.markdown("**Intrinsic value per share** — rows: discount rate, columns: terminal growth")
+            st.markdown(T("**Intrinsic value per share** — rows: discount rate, columns: terminal growth"))
             st.dataframe(show.style.format("${:,.0f}", na_rep="n/m"))
             proj = base.projections.copy()
             proj["Growth"] = proj["Growth"].map(pct)
             for col in ("FCF", "PV of FCF"):
                 proj[col] = proj[col].map(money)
             proj["Discount factor"] = proj["Discount factor"].map(lambda x: f"{x:.3f}")
-            st.dataframe(proj, hide_index=True)
-            st.caption(f"Discounted FCF {money(base.pv_fcf)} + discounted terminal value {money(base.pv_terminal)} = EV {money(base.enterprise_value)}; "
-                       f"− net debt {money(f['net_debt'])} = equity {money(base.equity_value)}; ÷ {shares / 1e9:,.2f}B shares = ${base.per_share:,.2f}. "
-                       f"Terminal value is {pct(base.terminal_share, 0, False)} of EV.")
+            st.dataframe(proj.rename(columns=lambda col: T(str(col))), hide_index=True)
+            st.caption(T("Discounted FCF {a} + discounted terminal value {b} = EV {ev}; − net debt {nd} = equity {eq}; ÷ {sh}B shares = ${ps}. Terminal value is {ts} of EV.",
+                         a=money(base.pv_fcf), b=money(base.pv_terminal), ev=money(base.enterprise_value), nd=money(f['net_debt']),
+                         eq=money(base.equity_value), sh=f"{shares / 1e9:,.2f}", ps=f"{base.per_share:,.2f}", ts=pct(base.terminal_share, 0, False)))
         result.update({"base": base.per_share, "bear": bear.per_share, "bull": bull.per_share, "growth": growth,
                        "g_term": g_term, "discount": discount, "implied": implied, "label": label, "gap": gap, "source": "your"})
         st.session_state[f"val_{t}"] = result
-    st.html(f'<div class="mb-sec">Multiples {src("rep")} {src("calc")}</div>' + stats_row([
+    st.html(f'<div class="mb-sec">{T("Multiples")} {src("rep")} {src("calc")}</div>' + stats_row([
         ("Market cap", money(mcap), ""), (f"P/E, FY{last_year}", f"{price / eps:,.1f}x" if eps and eps > 0 else "n/m", ""),
         (f"Price / FCF, FY{last_year}", f"{mcap / last_fcf:,.1f}x" if last_fcf > 0 else "n/m", ""),
         ("FCF yield", pct(last_fcf / mcap, signed=False) if last_fcf > 0 else "n/m", ""),
@@ -400,54 +405,52 @@ def valuation(c: dict) -> dict | None:
 def outlook(c: dict) -> None:
     t, hist, q = c["t"], c["hist"], c["q"]
     labels = {"neutral": "No trend", "market": "Market average (+8%/yr)", "trend": "Recent trend (capped ±30%/yr)"}
-    choice = st.segmented_control("Trend assumption", list(labels.values()), default=labels["neutral"], key=f"drift_{t}") or labels["neutral"]
-    drift = next(k for k, v in labels.items() if v == choice)
+    picked = choice(st.segmented_control, T("Trend assumption"), list(labels.values()), key=f"drift_{t}",
+                    default=labels["neutral"]) or labels["neutral"]
+    drift = next(k for k, v in labels.items() if v == picked)
     dcf_val = None
     f = safe(data.company_fundamentals, t)
     if f:
         v = analysis.default_valuation(f, q["price"], c["m"]["beta"], c["rf"])
         dcf_val = v["per_share"] if v else None
-    with st.spinner("Simulating 4,000 scenarios…"):
+    with st.spinner(T("Simulating 4,000 scenarios…")):
         out = outlook_for(t, drift, float(hist["close"].iloc[-1]), c["high52"], dcf_val)
     if not out:
-        st.info("Not enough price history to simulate scenarios.")
+        st.info(T("Not enough price history to simulate scenarios."))
         return
     start = out["start"]
     pr = out["probs"]
-    cards = [(pr["finish_up"], "end the 6 months above today's close"), (pr["drop_20"], "fall 20% or more at some point"),
-             (pr["touch_high"], f"reach the 52-week high (${c['high52']:,.2f})")]
+    cards = [(pr["finish_up"], T("of scenarios end the 6 months above today's close")), (pr["drop_20"], T("of scenarios fall 20% or more at some point")),
+             (pr["touch_high"], T("of scenarios reach the 52-week high (${v})", v=f"{c['high52']:,.2f}"))]
     if pr["touch_target"] is not None:
-        cards.append((pr["touch_target"], f"touch the DCF value (${dcf_val:,.2f})"))
-    st.html(f'<div class="mb-sec">Model probabilities over 6 months {src("calc")}</div><div class="mb-prob">' + "".join(
-        f'<div><div class="v num">{v:.0%}</div><div class="k">of scenarios {esc(k)}</div><div class="bar"><i style="width:{v * 100:.0f}%"></i></div></div>'
+        cards.append((pr["touch_target"], T("of scenarios touch the DCF value (${v})", v=f"{dcf_val:,.2f}")))
+    st.html(f'<div class="mb-sec">{T("Model probabilities over 6 months")} {src("calc")}</div><div class="mb-prob">' + "".join(
+        f'<div><div class="v num">{v:.0%}</div><div class="k">{esc(k)}</div><div class="bar"><i style="width:{v * 100:.0f}%"></i></div></div>'
         for v, k in cards if v is not None) + "</div>")
-    st.plotly_chart(charts.fan_chart(hist["close"], out["fan"], [("52-week high", c["high52"], "up"), ("DCF value", dcf_val, "violet"),
-                                                                 ("52-week low", c["low52"], "down")]),
-                    config=charts.CONFIG, key=f"fan_{t}_{drift}")
+    st.plotly_chart(charts.fan_chart(hist["close"], out["fan"], [(T("52-week high"), c["high52"], "up"), (T("DCF value"), dcf_val, "violet"),
+                                                                 (T("52-week low"), c["low52"], "down")]),
+                    config=charts.CONFIG, key=f"fan_{t}_{drift}_{lang()}")
     a, b = st.columns([1.4, 1], gap="medium")
     with a:
-        head = "".join(f"<th>{lab}<br><span style='font-weight:400;color:var(--faint)'>{pc}th pct</span></th>"
+        head = "".join(f"<th>{T(lab)}<br><span style='font-weight:400;color:var(--faint)'>{T('{p}th pct', p=pc)}</span></th>"
                        for lab, pc in zip(analysis.OUTLOOK_LABELS, analysis.OUTLOOK_PERCENTILES))
         rows = ""
         for h, vals in out["table"].items():
-            rows += f'<tr><td class="l">{h}</td>' + "".join(
+            rows += f'<tr><td class="l">{T(h)}</td>' + "".join(
                 f'<td class="num">${v:,.2f}<br><span class="{signed_class(v / start - 1)}" style="font-size:.74rem">{pct(v / start - 1)}</span></td>'
                 for v in vals) + "</tr>"
-        st.html(f'<div class="mb-sec">Scenario table</div><div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">Horizon</th>{head}</tr>{rows}</table></div>')
+        st.html(f'<div class="mb-sec">{T("Scenario table")}</div><div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">{T("Horizon")}</th>{head}</tr>{rows}</table></div>')
     with b:
-        st.html('<div class="mb-sec">How this works</div><div class="mb-callout">4,000 six-month paths. Each simulated day replays a real '
-                f'daily move of {esc(t)} from the last two years, so crash days and rallies keep their real frequency. The trend '
-                "assumption replaces the average move. These are <b>model probabilities, not forecasts</b>: they assume the next six "
-                "months look like a reshuffled version of the past two years.</div>")
+        st.html(f'<div class="mb-sec">{T("How this works")}</div><div class="mb-callout">' + T("4,000 six-month paths. Each simulated day replays a real daily move of {t} from the last two years, so crash days and rallies keep their real frequency. The trend assumption replaces the average move. These are <b>model probabilities, not forecasts</b>: they assume the next six months look like a reshuffled version of the past two years.", t=esc(t)) + "</div>")
 
 
 # =========================================================================== Compare
 def compare(c: dict) -> None:
     t = c["t"]
     peers = [x for x in c["wl"] if x != t][:3]
-    picks = st.multiselect("Compare with", list(dict.fromkeys([BENCHMARK, "QQQ"] + c["wl"] + [x for x, _ in data.MEGA_CAPS])),
+    picks = st.multiselect(T("Compare with"), list(dict.fromkeys([BENCHMARK, "QQQ"] + c["wl"] + [x for x, _ in data.MEGA_CAPS])),
                            default=[BENCHMARK] + peers, key=f"cmp_{t}", max_selections=5)
-    rng = st.segmented_control("Period", ["3M", "6M", "1Y", "3Y", "5Y"], default="1Y", key=f"cmprng_{t}") or "1Y"
+    rng = st.segmented_control(T("Period"), ["3M", "6M", "1Y", "3Y", "5Y"], default="1Y", key=f"cmprng_{t}") or "1Y"
     n = {"3M": 63, "6M": 126, "1Y": 252, "3Y": 756, "5Y": 1260}[rng]
     closes = {t: c["hist"]["close"]}
     for x in picks:
@@ -466,20 +469,20 @@ def compare(c: dict) -> None:
                     f'<td class="num {signed_class(tot)}">{pct(tot)}</td><td class="num">{pct(vol, signed=False)}</td>'
                     f'<td class="num neg">{pct(float((s / s.cummax() - 1).min()))}</td>'
                     f'<td class="num">{num(r.corr(df[t].pct_change().dropna()) if k != t else 1.0)}</td></tr>')
-    st.html(f'<div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">Ticker</th><th>Return</th><th>Volatility</th>'
-            f'<th>Max drawdown</th><th>Correlation with {esc(t)}</th></tr>{"".join(rows)}</table></div>'
-            f'<p class="mb-foot">More options on the <a href="{link({"p": "compare"})}" target="_self">Compare</a> page, including an equal-weight portfolio.</p>')
+    st.html(f'<div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">Ticker</th><th>{T("Return")}</th><th>{T("Volatility")}</th>'
+            f'<th>{T("Max drawdown")}</th><th>{T("Correlation with {t}", t=esc(t))}</th></tr>{"".join(rows)}</table></div><p class="mb-foot">'
+            + T("More options on the <a href=\"{u}\" target=\"_self\">Compare</a> page, including an equal-weight portfolio.", u=link({"p": "compare"})) + "</p>")
 
 
 # =========================================================================== News
 def news(c: dict) -> list[dict]:
     items = safe(data.company_news, c["t"], default=[]) or []
     if not items:
-        st.info("No company news in the last 7 days.")
+        st.info(T("No company news in the last 7 days."))
         return []
-    st.html(f'<div class="mb-panel"><div class="mb-h"><b>Latest news on {esc(c["t"])}</b><span>Finnhub {src("mkt")}</span></div><div class="mb-news">' + "".join(
+    st.html(f'<div class="mb-panel"><div class="mb-h"><b>{T("Latest news on {t}", t=esc(c["t"]))}</b><span>Finnhub {src("mkt")}</span></div><div class="mb-news">' + "".join(
         f'<div><a class="t" href="{esc(n["url"])}" target="_blank" rel="noopener">{esc(n["title"])}</a>'
-        f'<div class="m">{esc(n["source"])} · {n["time"]:%b %d, %-I:%M %p}</div>'
+        f'<div class="m">{esc(n["source"])} · {D(n["time"], "%b %d, %-I:%M %p")}</div>'
         + (f'<div class="s">{esc(n["summary"])}</div>' if n["summary"] else "") + "</div>" for n in items if n.get("time")) + "</div></div>")
     return items
 
@@ -525,7 +528,7 @@ def ai_data_text(c: dict, val: dict | None, out: dict | None) -> str:
 
 def lean_badge(lean: str | None, big_text: bool = True) -> str:
     cls = {"Buy": "up", "Strong Buy": "up", "Hold": "hold", "Sell": "down", "Strong Sell": "down"}.get(lean or "", "flat")
-    return f'<span class="mb-lean {cls}{" big" if big_text else ""}">{esc(lean or "n/a")}</span>'
+    return f'<span class="mb-lean {cls}{" big" if big_text else ""}">{esc(T(lean) if lean else "n/a")}</span>'
 
 
 def default_val(c: dict) -> dict | None:
@@ -548,33 +551,32 @@ def default_val(c: dict) -> dict | None:
 def consensus_card(t: str) -> tuple[str, dict | None]:
     recs = safe(data.recommendations, t, default=[]) or []
     cs = analysis.consensus(recs[0]) if recs else None
-    head = (f'<div class="mb-kicker">What the experts say</div><div class="mb-h"><b>Wall Street consensus</b>'
-            f'<span>Finnhub recommendation trends {src("ana")}</span></div>')
+    head = (f'<div class="mb-kicker">{T("What the experts say")}</div><div class="mb-h"><b>{T("Wall Street consensus")}</b>'
+            f'<span>{T("Finnhub recommendation trends")} {src("ana")}</span></div>')
     if not cs:
-        return f'<div class="mb-panel mb-take">{head}<p class="mb-foot">No analyst ratings available for {esc(t)}.</p></div>', None
+        return f'<div class="mb-panel mb-take">{head}<p class="mb-foot">{T("No analyst ratings available for {t}.", t=esc(t))}</p></div>', None
     trend = ""
     old = analysis.consensus(recs[3]) if len(recs) > 3 else (analysis.consensus(recs[-1]) if len(recs) > 1 else None)
     if old:
         d = cs["score"] - old["score"]
-        word = "more bullish" if d > 0.02 else "more bearish" if d < -0.02 else "unchanged"
-        trend = f' · {word} vs {old["period"]}'
+        word = T("more bullish") if d > 0.02 else T("more bearish") if d < -0.02 else T("unchanged")
+        trend = f' · {word} {T("vs")} {old["period"]}'
     k, n, pal = cs["counts"], cs["n"], P()
     colors = {"strongBuy": pal["up"], "buy": pal["up"] + "99", "hold": pal["faint"], "sell": pal["down"] + "99", "strongSell": pal["down"]}
-    names = {"strongBuy": "Strong Buy", "buy": "Buy", "hold": "Hold", "sell": "Sell", "strongSell": "Strong Sell"}
+    names = {"strongBuy": T("Strong Buy"), "buy": T("Buy"), "hold": T("Hold"), "sell": T("Sell"), "strongSell": T("Strong Sell")}
     bar = "".join(f'<i style="width:{k[x] / n * 100:.2f}%;background:{colors[x]}" title="{names[x]} {k[x]}"></i>' for x in names if k[x])
     legend = " · ".join(f'<span><b style="background:{colors[x]}"></b>{names[x]} {k[x]}</span>' for x in names)
     html_ = (f'<div class="mb-panel mb-take">{head}<div class="mb-take-row">{lean_badge(cs["label"])}'
              f'<div><div class="mb-score num">{cs["score"]:.2f} <small>/ 5</small></div>'
-             f'<div class="mb-foot" style="margin:0">{n} analysts · {cs["period"]}{trend}</div></div></div>'
+             f'<div class="mb-foot" style="margin:0">{n} {T("analysts")} · {cs["period"]}{trend}</div></div></div>'
              f'<div class="mb-stack">{bar}</div><div class="mb-legend">{legend}</div>'
-             f'<p class="mb-foot">Ratings from the brokerage analysts that cover the stock, aggregated monthly by Finnhub '
-             f'(5 = strong buy, 1 = strong sell). Price targets are not in the free plan.</p></div>')
+             f'<p class="mb-foot">{T("Ratings from the brokerage analysts that cover the stock, aggregated monthly by Finnhub (5 = strong buy, 1 = strong sell). Price targets are not in the free plan.")}</p></div>')
     return html_, cs
 
 
 def analysts_section(c: dict) -> None:
     t = c["t"]
-    key = f"take_{t}"
+    key = f"take_{t}_{lang()}"
     val = st.session_state.get(f"val_{t}")
     using_yours = bool(val and val.get("base"))
     card, cs = consensus_card(t)
@@ -582,53 +584,53 @@ def analysts_section(c: dict) -> None:
     left.html(card)
     with right:
         take = st.session_state.get(key)
-        head = (f'<div class="mb-kicker">Model view</div><div class="mb-h"><b>AI take</b>'
-                f'<span>Gemini reads the data on this page {src("ai")}</span></div>')
+        head = (f'<div class="mb-kicker">{T("Model view")}</div><div class="mb-h"><b>{T("AI take")}</b>'
+                f'<span>{T("Gemini reads the data on this page")} {src("ai")}</span></div>')
         if take and take.get("lean"):
             agree = ""
             if cs:
                 same = (take["lean"] == "Buy" and cs["label"] in ("Buy", "Strong Buy")) or (take["lean"] == "Sell" and cs["label"] in ("Sell", "Strong Sell")) \
                     or (take["lean"] == "Hold" and cs["label"] == "Hold")
-                agree = f'<span class="mb-chip {"up" if same else "flat"}">{"Agrees with" if same else "Differs from"} Wall Street</span>'
-            conv = f'<div class="mb-foot" style="margin:0">Conviction: {esc(take.get("conviction") or "n/a")}</div>'
+                agree = f'<span class="mb-chip {"up" if same else "flat"}">{T("Agrees with Wall Street") if same else T("Differs from Wall Street")}</span>'
+            conv = f'<div class="mb-foot" style="margin:0">{T("Conviction")}: {esc(T(take.get("conviction") or "n/a"))}</div>'
+            written = T("Model opinion from the data in this app, written {d} ET. Not investment advice.", d=D(take["generated_at"], "%b %d, %-I:%M %p"))
             st.html(f'<div class="mb-panel mb-take">{head}<div class="mb-take-row">{lean_badge(take["lean"])}<div>{agree}{conv}</div></div>'
                     f'<p class="mb-p">{esc(take.get("lean_reason", ""))}</p>'
-                    f'<p class="mb-p"><b>Vs the consensus.</b> {esc(take.get("vs_consensus", ""))}</p>'
-                    f'<p class="mb-foot">Model opinion from the data in this app, written {take["generated_at"]:%b %d, %-I:%M %p} ET. '
-                    "Not investment advice.</p></div>")
+                    f'<p class="mb-p"><b>{T("Vs the consensus.")}</b> {esc(take.get("vs_consensus", ""))}</p>'
+                    f'<p class="mb-foot">{written}</p></div>')
         else:
-            st.html(f'<div class="mb-panel mb-take">{head}<p class="mb-p">Click the button for a written take with a <b>Buy / Hold / Sell</b> lean, '
-                    "compared against the Wall Street consensus, plus bull, base and bear cases, risks and catalysts. "
-                    + ("It uses the <b>DCF assumptions set in the Valuation tab</b>." if using_yours else
-                       "It uses the default DCF assumptions; open the Valuation tab and adjust them first to use yours.")
-                    + '</p><p class="mb-foot">Data: fetched from the sources · Calc: computed by the app · AI: model opinion.</p></div>')
-        label = "Refresh AI take" if take else "Generate AI take"
+            st.html(f'<div class="mb-panel mb-take">{head}<p class="mb-p">'
+                    + T("Click the button for a written take with a <b>Buy / Hold / Sell</b> lean, compared against the Wall Street consensus, plus bull, base and bear cases, risks and catalysts.") + " "
+                    + (T("It uses the <b>DCF assumptions set in the Valuation tab</b>.") if using_yours else
+                       T("It uses the default DCF assumptions; open the Valuation tab and adjust them first to use yours."))
+                    + '</p><p class="mb-foot">' + T("Data: fetched from the sources · Calc: computed by the app · AI: model opinion.") + "</p></div>")
+        label = T("Refresh AI take") if take else T("Generate AI take")
         clicked = st.button(label, type="primary", key=f"btn_{key}", width="stretch")
     if clicked:
-        with st.spinner("Collecting the data and writing the take… (10 to 30 seconds)"):
+        with st.spinner(T("Collecting the data and writing the take… (10 to 30 seconds)")):
             v = val if using_yours else default_val(c)
             out = safe(outlook_for, t, "neutral", float(c["hist"]["close"].iloc[-1]), c["high52"], None)
             news_items = safe(data.company_news, t, default=[]) or []
             assumptions = (f"{v.get('growth', 0):.4f}|{v.get('g_term', 0):.4f}|{v.get('discount', 0):.4f}|{v.get('source')}"
                            if v and v.get("base") else "none")
             try:
-                st.session_state[key] = ai.stock_take(t, c["p"].get("name") or t, dt.date.today().isoformat(), assumptions,
+                st.session_state[key] = ai.stock_take(t, c["p"].get("name") or t, dt.date.today().isoformat(), assumptions, lang(),
                                                       ai_data_text(c, v, out), news_items)
                 st.rerun()
             except Exception as exc:
-                st.warning(f"The AI take couldn't be written this time: {exc}")
+                st.warning(T("The AI take couldn't be written this time: {e}", e=exc))
     take = st.session_state.get(key)
     if not take:
         return
-    body = "".join(f'<p><b>{title}.</b> {esc(take[k])}</p>' for title, k in (
+    body = "".join(f'<p><b>{T(title)}.</b> {esc(take[k])}</p>' for title, k in (
         ("Where it stands", "situation"), ("Recent performance", "recent_performance"), ("Fundamentals", "fundamentals"),
         ("Valuation", "valuation"), ("News flow", "news")) if take.get(k))
-    cases = "".join(f'<div class="mb-story"><h3>{title}</h3><p>{esc(take.get(k, ""))}</p></div>'
+    cases = "".join(f'<div class="mb-story"><h3>{T(title)}</h3><p>{esc(take.get(k, ""))}</p></div>'
                     for title, k in (("Bear case", "bear_case"), ("Base case", "base_case"), ("Bull case", "bull_case")))
     risks = "".join(f"<li>{esc(r)}</li>" for r in take.get("risks", []))
     cats = "".join(f"<li>{esc(x)}</li>" for x in take.get("catalysts", []))
-    st.html(f'<div class="mb-sec">Full AI analysis {src("ai")}</div><div class="mb-story top">{body}</div><div class="mb-grid3">{cases}</div>'
-            f'<div class="mb-grid2"><div class="mb-story"><h3>Main risks</h3><ul>{risks}</ul></div>'
-            f'<div class="mb-story"><h3>Coming catalysts</h3><ul>{cats}</ul></div></div>'
-            f'<div class="mb-callout"><b>Conclusion.</b> {esc(take.get("conclusion", ""))}</div>'
-            '<p class="mb-note">Not investment advice · statistics describe the past, they don\'t predict the future.</p>')
+    st.html(f'<div class="mb-sec">{T("Full AI analysis")} {src("ai")}</div><div class="mb-story top">{body}</div><div class="mb-grid3">{cases}</div>'
+            f'<div class="mb-grid2"><div class="mb-story"><h3>{T("Main risks")}</h3><ul>{risks}</ul></div>'
+            f'<div class="mb-story"><h3>{T("Coming catalysts")}</h3><ul>{cats}</ul></div></div>'
+            f'<div class="mb-callout"><b>{T("Conclusion.")}</b> {esc(take.get("conclusion", ""))}</div><p class="mb-note">'
+            + T("Not investment advice · statistics describe the past, they don't predict the future.") + "</p>")

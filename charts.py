@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 import analysis
+from i18n import T
 from ui import P
 
 FONT = "Inter, system-ui, sans-serif"
@@ -95,7 +96,7 @@ def price_chart(df: pd.DataFrame, kind: str = "area", intraday: bool = False, pr
 
     if kind == "candles" and {"open", "high", "low"} <= set(df.columns):
         fig.add_trace(go.Candlestick(
-            x=df.index, open=df["open"], high=df["high"], low=df["low"], close=close, name="Price",
+            x=df.index, open=df["open"], high=df["high"], low=df["low"], close=close, name=T("Price"),
             increasing=dict(line=dict(color=p["up"], width=1), fillcolor=p["up"]),
             decreasing=dict(line=dict(color=p["down"], width=1), fillcolor=p["down"]),
             whiskerwidth=0.3), row=1, col=1)
@@ -103,7 +104,7 @@ def price_chart(df: pd.DataFrame, kind: str = "area", intraday: bool = False, pr
         fig.add_trace(go.Scatter(x=df.index, y=np.full(len(df), floor), mode="lines", line=dict(width=0), showlegend=False,
                                  hoverinfo="skip"), row=1, col=1)
         fig.add_trace(go.Scatter(
-            x=df.index, y=close, mode="lines", name="Price", line=dict(color=color, width=2),
+            x=df.index, y=close, mode="lines", name=T("Price"), line=dict(color=color, width=2),
             fill="tonexty", fillgradient=dict(type="vertical", colorscale=[[0, _rgba(color, 0.0)], [1, _rgba(color, 0.22)]]),
             hovertemplate="$%{y:,.2f}<extra></extra>"), row=1, col=1)
 
@@ -112,7 +113,7 @@ def price_chart(df: pd.DataFrame, kind: str = "area", intraday: bool = False, pr
     for i, n in enumerate(mas):
         ma = src.rolling(n).mean().reindex(df.index)
         if ma.notna().any():
-            fig.add_trace(go.Scatter(x=df.index, y=ma, mode="lines", name=f"{n}-day avg",
+            fig.add_trace(go.Scatter(x=df.index, y=ma, mode="lines", name=T("{n}-day avg", n=n),
                                      line=dict(color=palette[i % 3], width=1.3), hovertemplate="$%{y:,.2f}<extra>%{fullData.name}</extra>"),
                           row=1, col=1)
     if bollinger:
@@ -120,27 +121,27 @@ def price_chart(df: pd.DataFrame, kind: str = "area", intraday: bool = False, pr
         sd = src.rolling(20).std()
         upper, lower = (mid + 2 * sd).reindex(df.index), (mid - 2 * sd).reindex(df.index)
         fig.add_trace(go.Scatter(x=df.index, y=upper, mode="lines", line=dict(color=p["faint"], width=1, dash="dot"),
-                                 name="Bollinger (20, 2σ)", hovertemplate="$%{y:,.2f}<extra>Upper band</extra>"), row=1, col=1)
+                                 name="Bollinger (20, 2σ)", hovertemplate="$%{y:,.2f}<extra>" + T("Upper band") + "</extra>"), row=1, col=1)
         fig.add_trace(go.Scatter(x=df.index, y=lower, mode="lines", line=dict(color=p["faint"], width=1, dash="dot"),
                                  fill="tonexty", fillcolor=_rgba(p["accent"], 0.05), showlegend=False,
-                                 hovertemplate="$%{y:,.2f}<extra>Lower band</extra>"), row=1, col=1)
+                                 hovertemplate="$%{y:,.2f}<extra>" + T("Lower band") + "</extra>"), row=1, col=1)
     if cone_vol and not intraday:
         future = pd.bdate_range(df.index[-1], periods=64)
         s = cone_vol * np.sqrt(np.arange(len(future)) / analysis.TRADING_DAYS)
         fig.add_trace(go.Scatter(x=future, y=last * np.exp(s), mode="lines", line=dict(color=p["accent"], width=1, dash="dot"),
-                                 name="±1σ range ahead", hovertemplate="$%{y:,.2f}<extra>Upper</extra>"), row=1, col=1)
+                                 name=T("±1σ range ahead"), hovertemplate="$%{y:,.2f}<extra>" + T("Upper") + "</extra>"), row=1, col=1)
         fig.add_trace(go.Scatter(x=future, y=last * np.exp(-s), mode="lines", line=dict(color=p["accent"], width=1, dash="dot"),
                                  fill="tonexty", fillcolor=_rgba(p["accent"], 0.08), showlegend=False,
-                                 hovertemplate="$%{y:,.2f}<extra>Lower</extra>"), row=1, col=1)
+                                 hovertemplate="$%{y:,.2f}<extra>" + T("Lower") + "</extra>"), row=1, col=1)
     if intraday and prev_close:
         fig.add_hline(y=prev_close, line=dict(color=p["faint"], width=1, dash="dash"), row=1, col=1,
-                      annotation_text=f"Prev close {prev_close:,.2f}", annotation_position="top left",
+                      annotation_text=T("Prev close {v}", v=f"{prev_close:,.2f}"), annotation_position="top left",
                       annotation_font=dict(size=10, color=p["muted"]))
 
     if "volume" in df and df["volume"].notna().any():
         vcol = np.where(df["close"] >= df["close"].shift(1).fillna(df["close"]), _rgba(p["up"], 0.45), _rgba(p["down"], 0.45))
-        fig.add_trace(go.Bar(x=df.index, y=df["volume"], marker_color=vcol, name="Volume", showlegend=False,
-                             hovertemplate="%{y:,.0f}<extra>Volume</extra>"), row=2, col=1)
+        fig.add_trace(go.Bar(x=df.index, y=df["volume"], marker_color=vcol, name=T("Volume"), showlegend=False,
+                             hovertemplate="%{y:,.0f}<extra>" + T("Volume") + "</extra>"), row=2, col=1)
     if show_rsi:
         r = rsi(src).reindex(df.index)
         fig.add_trace(go.Scatter(x=df.index, y=r, mode="lines", line=dict(color=p["violet"], width=1.3), name="RSI (14)",
@@ -171,16 +172,16 @@ def fan_chart(close: pd.Series, fan: np.ndarray, levels: list[tuple[str, float, 
     fx = [h.index[-1]] + list(future)
     band = lambda row: [last] + list(fan[row])  # noqa: E731
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=h.index, y=h.values, mode="lines", line=dict(color=p["ink"], width=1.8), name="Price",
-                             hovertemplate="$%{y:,.2f}<extra>Price</extra>"))
+    fig.add_trace(go.Scatter(x=h.index, y=h.values, mode="lines", line=dict(color=p["ink"], width=1.8), name=T("Price"),
+                             hovertemplate="$%{y:,.2f}<extra>" + T("Price") + "</extra>"))
     fig.add_trace(go.Scatter(x=fx, y=band(4), mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip"))
     fig.add_trace(go.Scatter(x=fx, y=band(0), mode="lines", line=dict(width=0), fill="tonexty",
-                             fillcolor=_rgba(p["accent"], 0.12), name="9 in 10 scenarios", hoverinfo="skip"))
+                             fillcolor=_rgba(p["accent"], 0.12), name=T("9 in 10 scenarios"), hoverinfo="skip"))
     fig.add_trace(go.Scatter(x=fx, y=band(3), mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip"))
     fig.add_trace(go.Scatter(x=fx, y=band(1), mode="lines", line=dict(width=0), fill="tonexty",
-                             fillcolor=_rgba(p["accent"], 0.26), name="Middle half of scenarios", hoverinfo="skip"))
+                             fillcolor=_rgba(p["accent"], 0.26), name=T("Middle half of scenarios"), hoverinfo="skip"))
     fig.add_trace(go.Scatter(x=fx, y=band(2), mode="lines", line=dict(color=p["accent"], width=1.8, dash="dash"),
-                             name="Median path", hovertemplate="$%{y:,.2f}<extra>Median</extra>"))
+                             name=T("Median path"), hovertemplate="$%{y:,.2f}<extra>" + T("Median") + "</extra>"))
     for name, value, color_key in levels:
         if value:
             fig.add_hline(y=value, line=dict(color=p[color_key], width=1.2, dash="dot"),
@@ -213,12 +214,12 @@ def yield_curve(df: pd.DataFrame) -> go.Figure:
     p = P()
     fig = go.Figure()
     if df["month_ago"].notna().any():
-        fig.add_trace(go.Scatter(x=df["tenor"], y=df["month_ago"], mode="lines+markers", name="A month ago",
+        fig.add_trace(go.Scatter(x=df["tenor"], y=df["month_ago"], mode="lines+markers", name=T("A month ago"),
                                  line=dict(color=p["faint"], width=1.5, dash="dot"), marker=dict(size=5),
-                                 hovertemplate="%{y:.2f}%<extra>A month ago</extra>"))
-    fig.add_trace(go.Scatter(x=df["tenor"], y=df["now"], mode="lines+markers", name=f"Latest ({df['date'].iloc[0]})",
+                                 hovertemplate="%{y:.2f}%<extra>" + T("A month ago") + "</extra>"))
+    fig.add_trace(go.Scatter(x=df["tenor"], y=df["now"], mode="lines+markers", name=T("Latest ({d})", d=df['date'].iloc[0]),
                              line=dict(color=p["accent"], width=2.2), marker=dict(size=6),
-                             hovertemplate="%{y:.2f}%<extra>Latest</extra>"))
+                             hovertemplate="%{y:.2f}%<extra>" + T("Latest") + "</extra>"))
     base(fig, 260)
     fig.update_yaxes(ticksuffix="%")
     fig.update_xaxes(showspikes=False)
@@ -290,8 +291,8 @@ def recommendations(rows: list[dict]) -> go.Figure:
     p = P()
     rows = list(reversed(rows))
     periods = [r["period"][:7] for r in rows]
-    parts = [("strongSell", "Strong sell", "#B3261E"), ("sell", "Sell", "#E0675F"), ("hold", "Hold", p["faint"]),
-             ("buy", "Buy", "#3FB27F"), ("strongBuy", "Strong buy", "#0A7F45")]
+    parts = [("strongSell", T("Strong sell"), "#B3261E"), ("sell", T("Sell"), "#E0675F"), ("hold", T("Hold"), p["faint"]),
+             ("buy", T("Buy"), "#3FB27F"), ("strongBuy", T("Strong buy"), "#0A7F45")]
     fig = go.Figure()
     for key, name, color in parts:
         fig.add_trace(go.Bar(x=periods, y=[r.get(key, 0) for r in rows], name=name, marker_color=color,
@@ -353,7 +354,7 @@ def football_field(rows: list[tuple[str, float, float]], price: float) -> go.Fig
         text=[f"${lo:,.0f} – ${h:,.0f}" for lo, h in zip(lows, highs)], textposition="outside",
         textfont=dict(color=p["muted"], size=11), cliponaxis=False))
     fig.add_vline(x=price, line=dict(color=p["ink"], width=2, dash="dot"))
-    fig.add_annotation(x=price, y=1.07, yref="paper", text=f"<b>Price ${price:,.2f}</b>", showarrow=False,
+    fig.add_annotation(x=price, y=1.07, yref="paper", text="<b>" + T("Price") + f" ${price:,.2f}</b>", showarrow=False,
                        font=dict(color=p["ink"], size=11))
     lo_all, hi_all = min(lows + [price]), max(highs + [price])
     span = hi_all - lo_all or 1

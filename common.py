@@ -7,6 +7,7 @@ import numpy as np
 import streamlit as st
 
 import data
+from i18n import LANGS, D, T, choice
 from ui import esc, link, sgn
 
 DEFAULT_WATCHLIST = ["AAPL", "NVDA", "MSFT", "GOOGL", "TSLA"]
@@ -54,7 +55,7 @@ def num(x, decimals: int = 2, suffix: str = "") -> str:
 
 
 def when(t: dt.datetime | None) -> str:
-    return f"{t:%b %d, %-I:%M %p} ET" if t else ""
+    return f"{D(t, '%b %d, %-I:%M %p')} ET" if t else ""
 
 
 def safe(fn, *args, default=None, **kwargs):
@@ -100,6 +101,8 @@ def init_state() -> None:
     if "page" not in st.session_state:
         qp = st.query_params.get("p", "markets")
         st.session_state.page = next((k for k, v in PAGES.items() if v == qp), "Markets")
+    if "lang_sel" not in st.session_state:
+        st.session_state.lang_sel = "ES" if st.query_params.get("lang", "").lower() == "es" else "EN"
     if "ticker" not in st.session_state:
         st.session_state.ticker = (st.query_params.get("t") or get_watchlist()[0]).upper()
     if st.session_state.page:
@@ -109,6 +112,10 @@ def init_state() -> None:
 def current_page() -> str:
     page = st.session_state.get("page") or st.session_state.get("last_page") or "Markets"
     st.query_params["p"] = PAGES[page]
+    if st.session_state.get("lang_sel") == "ES":
+        st.query_params["lang"] = "es"
+    elif "lang" in st.query_params:
+        del st.query_params["lang"]
     if page == "Stock":
         st.query_params["t"] = st.session_state.ticker
     elif "t" in st.query_params:
@@ -119,22 +126,25 @@ def current_page() -> str:
 # =========================================================================== top bar & tape
 def top_bar() -> None:
     with st.container(key="topbar"):
-        c1, c2, c3 = st.columns([1.35, 4.4, 2.3], vertical_alignment="center")
+        c1, c2, c4, c3 = st.columns([1.3, 5.0, 0.85, 1.75], vertical_alignment="center")
         c1.html('<div class="mb-logo"><span class="mark">MB</span><span>Market Brief'
-                '<small>Free markets terminal</small></span></div>')
+                f'<small>{T("Free markets terminal")}</small></span></div>')
         with c2:
-            st.segmented_control("Navigate", list(PAGES), key="page", label_visibility="collapsed")
+            choice(st.segmented_control, "Navigate", list(PAGES), key="page", default="Markets", label_visibility="collapsed")
+        with c4:
+            st.segmented_control("Language", list(LANGS), key="lang_sel", label_visibility="collapsed",
+                                 help="English / Español")
         with c3:
-            q = st.text_input("Search", key="q", placeholder="Search a company or ticker", label_visibility="collapsed")
+            q = st.text_input("Search", key="q", placeholder=T("Search a company or ticker"), label_visibility="collapsed")
             if q and q.strip():
                 results = safe(data.search_symbols, q.strip(), default=[])
                 if results:
-                    choice = st.selectbox("Results", results, label_visibility="collapsed", key="q_pick",
+                    pick = st.selectbox("Results", results, label_visibility="collapsed", key="q_pick",
                                           format_func=lambda r: f"{r['symbol']}  {r['description']}")
-                    st.button(f"Open {choice['symbol']}", on_click=go_stock, args=(choice["symbol"],), type="primary",
+                    st.button(T("Open {s}", s=pick['symbol']), on_click=go_stock, args=(pick["symbol"],), type="primary",
                               width="stretch")
                 else:
-                    st.caption("No US-listed stock matches that search.")
+                    st.caption(T("No US-listed stock matches that search."))
 
 
 def tape_items(watchlist: list[str]) -> list[dict]:
@@ -142,7 +152,7 @@ def tape_items(watchlist: list[str]) -> list[dict]:
     for label, sym in INDEX_ETFS + [("Mexico", "EWW"), ("Argentina", "ARGT")]:
         q = safe(data.quote, sym)
         if q:
-            items.append({"label": label, "sym": sym, "price": f"{q['price']:,.2f}", "pct": q["pct"], "href": link({"p": "stock", "t": sym})})
+            items.append({"label": T(label), "sym": sym, "price": f"{q['price']:,.2f}", "pct": q["pct"], "href": link({"p": "stock", "t": sym})})
     for sym in watchlist:
         q = safe(data.quote, sym)
         if q:
@@ -155,7 +165,7 @@ def tape_items(watchlist: list[str]) -> list[dict]:
         items.append({"label": "USD/MXN", "sym": "", "price": f"{fx['price']:,.4f}", "pct": fx["pct"], "href": link({"p": "markets"})})
     t10 = safe(data.fred_latest, "DGS10")
     if t10:
-        items.append({"label": "US 10Y", "sym": "", "price": f"{t10['value']:.2f}%", "pct": None,
+        items.append({"label": T("US 10Y"), "sym": "", "price": f"{t10['value']:.2f}%", "pct": None,
                       "bps": round((t10["value"] - t10["prev"]) * 100), "href": link({"p": "markets"})})
     return items
 
@@ -180,9 +190,10 @@ def ticker_tape(watchlist: list[str]) -> None:
 def status_line() -> str:
     s = safe(data.market_status)
     if not s:
-        return "Market status unavailable"
+        return T("Market status unavailable")
     if s.get("isOpen"):
-        return '<span class="mb-dot open"></span>US market open'
-    session = {"pre-market": "pre-market", "post-market": "after hours"}.get(s.get("session") or "")
+        return '<span class="mb-dot open"></span>' + T("US market open")
+    session = {"pre-market": T("pre-market"), "post-market": T("after hours")}.get(s.get("session") or "")
     holiday = f" ({esc(s['holiday'])})" if s.get("holiday") else ""
-    return f'<span class="mb-dot closed"></span>US market {"in " + session if session else "closed" + holiday}, prices are the latest close'
+    state = T("in {s}", s=session) if session else T("closed") + holiday
+    return '<span class="mb-dot closed"></span>' + T("US market {state}, prices are the latest close", state=state)

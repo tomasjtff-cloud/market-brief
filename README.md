@@ -2,7 +2,7 @@
 
 A free markets terminal built in Python, styled after Yahoo Finance and Finviz. It covers the US market with Mexico and Argentina on the side: a scrolling ticker tape, a Finviz-style market map, a screener-style watchlist, stock comparison, and a full quote page per stock with financials, a DCF valuation, a 4,000-scenario outlook and an AI-written analysis.
 
-Everything runs on free data sources and free hosting, and works on a phone.
+Everything runs on free data sources and free hosting, works on a phone, and the whole interface and the AI text switch between English and Spanish (`?lang=es`).
 
 ## What it does
 
@@ -65,6 +65,7 @@ fundamentals.py   SEC XBRL parsing into revenue, FCF, cash, debt, shares
 analysis.py       risk metrics, WACC, DCF, reverse DCF, bootstrap outlook, portfolio math
 ai.py             daily brief and stock take (Gemini, picks an available model automatically)
 ui.py             styles and HTML building blocks
+i18n.py           English / Spanish switch (i18n_es.py holds the Spanish strings)
 ```
 
 ## Run it locally

@@ -14,6 +14,7 @@ import charts
 import data
 from common import (BENCHMARK, INDEX_ETFS, MAX_WATCHLIST, add_to_watchlist, big, get_watchlist, isnum, money, num,
                     pct, remove_from_watchlist, safe, status_line, when)
+from i18n import D, T, es, lang
 from ui import chip, esc, link, pill, range_bar, sgn, signed_class, spark_svg, src
 
 CLOCKS = [("New York", "America/New_York"), ("Mexico City", "America/Mexico_City"),
@@ -24,7 +25,7 @@ def page_header(title: str, sub: str, clocks: bool = False) -> None:
     right = ""
     if clocks:
         right = '<div class="mb-clocks">' + "".join(
-            f'<div class="mb-clock"><div class="c">{c}</div><div class="t num">{dt.datetime.now(ZoneInfo(tz)):%-I:%M %p}</div></div>'
+            f'<div class="mb-clock"><div class="c">{T(c)}</div><div class="t num">{D(dt.datetime.now(ZoneInfo(tz)), "%-I:%M %p")}</div></div>'
             for c, tz in CLOCKS) + "</div>"
     st.html(f'<div class="mb-ph"><div><h1>{esc(title)}</h1><div class="sub">{sub}</div></div>{right}</div>')
 
@@ -40,24 +41,24 @@ def quick_value(ticker: str, price: float) -> dict | None:
 
 
 # =========================================================================== Markets
-LOW_HIGH = "Today's low → high"
 
 
 def index_cards() -> list[str]:
     cards, snapshot = [], []
     status = safe(data.market_status, default={}) or {}
+    low_high = T("Today's low → high")
     for name, sym in INDEX_ETFS:
         q = safe(data.quote, sym)
-        head = f'<div class="hd"><span class="n">{name}</span><span class="via">via {sym}</span></div>'
+        head = f'<div class="hd"><span class="n">{T(name)}</span><span class="via">{T("via")} {sym}</span></div>'
         if not q:
             cards.append(f'<div class="mb-card">{head}<div class="p">n/a</div></div>')
             continue
-        state = f"Live · {q['time']:%-I:%M %p} ET" if status.get("isOpen") else f"Close · {q['time']:%b %-d}"
+        state = (T("Live") + f" · {D(q['time'], '%-I:%M %p')} ET") if status.get("isOpen") else (T("Close") + f" · {D(q['time'], '%b %-d')}")
         cards.append(
             f'<a class="mb-card" href="{link({"p": "stock", "t": sym})}" target="_self">{head}'
             f'<div class="p">${q["price"]:,.2f}</div>'
             f'<div class="c">{pill(q["pct"])}<span class="abs">{sgn(q["change"] or 0, 2, "")}</span></div>'
-            f'{range_bar(q["low"], q["high"], q["price"], left="$", right="$", label=LOW_HIGH)}'
+            f'{range_bar(q["low"], q["high"], q["price"], left="$", right="$", label=low_high)}'
             f'<div class="a">{state}</div></a>')
         snapshot.append(f"{name} ({sym}): ${q['price']:,.2f} ({q['pct']:+.2f}% today)")
     st.html(f'<div class="mb-cards" style="--cols:6">{"".join(cards)}</div>')
@@ -73,12 +74,12 @@ def latam_board() -> tuple[str, list[str]]:
 
     for name, sym in (("Mexico stocks (EWW)", "EWW"), ("Argentina stocks (ARGT)", "ARGT")):
         q = safe(data.quote, sym)
-        cells.append(cell(name, f"${q['price']:,.2f}", chip(q["pct"]), when(q["time"])) if q else cell(name, "n/a", "", "Unavailable"))
+        cells.append(cell(T(name), f"${q['price']:,.2f}", chip(q["pct"]), when(q["time"])) if q else cell(T(name), "n/a", "", T("Unavailable")))
         if q:
             text.append(f"{name}: ${q['price']:,.2f} ({q['pct']:+.2f}%)")
     fx = safe(data.fx_quote, "USD/MXN")
-    cells.append(cell("Dollar in Mexican pesos", f"{fx['price']:,.4f}", chip(fx["pct"]), f"As of {fx['time']}") if fx
-                 else cell("Dollar in Mexican pesos", "n/a", "", "Unavailable"))
+    cells.append(cell(T("Dollar in Mexican pesos"), f"{fx['price']:,.4f}", chip(fx["pct"]), T("As of {d}", d=fx['time'])) if fx
+                 else cell(T("Dollar in Mexican pesos"), "n/a", "", T("Unavailable")))
     if fx:
         text.append(f"USD/MXN {fx['price']:.4f} ({fx['pct']:+.2f}%)")
     ar = safe(data.dolares_ar) or {}
@@ -86,11 +87,11 @@ def latam_board() -> tuple[str, list[str]]:
     for casa, name in (("oficial", "Argentina official dollar"), ("bolsa", "Argentina MEP dollar"), ("blue", "Argentina blue dollar")):
         r = ar.get(casa)
         if not r:
-            cells.append(cell(name, "n/a", "", "Unavailable"))
+            cells.append(cell(T(name), "n/a", "", T("Unavailable")))
             continue
         gap = (r["sell"] / official - 1) * 100 if official and casa != "oficial" else None
-        ch = f'<span class="mb-chip flat">{gap:+.1f}% vs official</span>' if gap is not None else ""
-        cells.append(cell(name, f"ARS {r['sell']:,.0f}", ch, f"Sell, {when(r['time'])}" if r["time"] else "Sell"))
+        ch = f'<span class="mb-chip flat">{gap:+.1f}% {T("vs official")}</span>' if gap is not None else ""
+        cells.append(cell(T(name), f"ARS {r['sell']:,.0f}", ch, f"{T('Sell')}, {when(r['time'])}" if r["time"] else T("Sell")))
         text.append(f"{name}: ARS {r['sell']:,.0f}")
     return f'<div class="mb-board" style="--cols:3">{"".join(cells)}</div>', text
 
@@ -109,28 +110,28 @@ def watch_rail(wl: list[str]) -> None:
         e = safe(data.next_earnings, t)
         if e:
             upcoming.append((e["date"], t, e["timing"]))
-    html_ = f'<div class="mb-panel"><div class="mb-h"><b>My watchlist</b><span>3 months</span></div>{"".join(rows)}</div>'
+    html_ = f'<div class="mb-panel"><div class="mb-h"><b>{T("My watchlist")}</b><span>{T("3 months")}</span></div>{"".join(rows)}</div>'
     if upcoming:
-        html_ += ('<div class="mb-panel" style="margin-top:.7rem"><div class="mb-h"><b>Earnings coming up</b>'
+        html_ += (f'<div class="mb-panel" style="margin-top:.7rem"><div class="mb-h"><b>{T("Earnings coming up")}</b>'
                   f'<span>{src("mkt")}</span></div><div class="mb-cal">' + "".join(
-                      f'<div><span><b>{esc(t)}</b></span><span>{dt.date.fromisoformat(d):%a %b %-d}'
-                      f'{(", before open" if "before" in timing else ", after close") if timing else ""}</span></div>'
+                      f'<div><span><b>{esc(t)}</b></span><span>{D(dt.date.fromisoformat(d), "%a %b %-d")}'
+                      f'{(T(", before open") if "before" in timing else T(", after close")) if timing else ""}</span></div>'
                       for d, t, timing in sorted(upcoming)) + "</div></div>")
     st.html(html_)
 
 
 def story_html(s: dict, top: bool = False) -> str:
     sources = "".join(
-        f'<a class="mb-src" href="{esc(h["url"])}" target="_blank" rel="noopener">{esc(h["source"])}, {h["time"]:%b %d %-I:%M %p}</a>'
+        f'<a class="mb-src" href="{esc(h["url"])}" target="_blank" rel="noopener">{esc(h["source"])}, {D(h["time"], "%b %d %-I:%M %p")}</a>'
         for h in s["sources"])
     return (f'<div class="mb-story{" top" if top else ""}"><h3>{esc(s["headline"])}</h3>'
-            f'<p><b>What happened.</b> {esc(s["what_happened"])}</p><p><b>Why it matters.</b> {esc(s["why_it_matters"])}</p>'
-            f'<p class="watch"><b>Next to watch.</b> {esc(s["what_to_watch"])}</p><div class="mb-sources">{sources}</div></div>')
+            f'<p><b>{T("What happened.")}</b> {esc(s["what_happened"])}</p><p><b>{T("Why it matters.")}</b> {esc(s["why_it_matters"])}</p>'
+            f'<p class="watch"><b>{T("Next to watch.")}</b> {esc(s["what_to_watch"])}</p><div class="mb-sources">{sources}</div></div>')
 
 
 def page_markets(wl: list[str]) -> None:
     now = dt.datetime.now(data.ET)
-    page_header(f"Markets · {now:%A, %B %-d}", status_line(), clocks=True)
+    page_header(T("Markets") + " · " + (D(now, "%A %-d de %B") if es() else D(now, "%A, %B %-d")), status_line(), clocks=True)
     snapshot = index_cards()
 
     left, right = st.columns([2.3, 1], gap="medium")
@@ -140,17 +141,17 @@ def page_markets(wl: list[str]) -> None:
         a, b = st.columns(2, gap="small")
         with a:
             with st.container(key="panel_sectors"):
-                st.html(f'<div class="mb-h"><b>Sector performance today</b><span>SPDR sector ETFs {src("mkt")}</span></div>')
-                rows = [(name, q["pct"]) for name, sym in data.SECTOR_ETFS if (q := safe(data.quote, sym)) and q["pct"] is not None]
+                st.html(f'<div class="mb-h"><b>{T("Sector performance today")}</b><span>{T("SPDR sector ETFs")} {src("mkt")}</span></div>')
+                rows = [(T(name), q["pct"]) for name, sym in data.SECTOR_ETFS if (q := safe(data.quote, sym)) and q["pct"] is not None]
                 if rows:
                     st.plotly_chart(charts.sector_bars(rows), config=charts.CONFIG, key="sectors")
                     best, worst = max(rows, key=lambda r: r[1]), min(rows, key=lambda r: r[1])
                     snapshot.append(f"Best sector {best[0]} {best[1]:+.2f}%, worst {worst[0]} {worst[1]:+.2f}%")
                 else:
-                    st.caption("Sector data unavailable right now.")
+                    st.caption(T("Sector data unavailable right now."))
         with b:
             with st.container(key="panel_rates"):
-                st.html(f'<div class="mb-h"><b>US Treasury yield curve</b><span>FRED {src("mkt")}</span></div>')
+                st.html(f'<div class="mb-h"><b>{T("US Treasury yield curve")}</b><span>FRED {src("mkt")}</span></div>')
                 curve = safe(data.yield_curve)
                 if curve is not None and len(curve) > 2:
                     st.plotly_chart(charts.yield_curve(curve), config=charts.CONFIG, key="curve")
@@ -163,51 +164,50 @@ def page_markets(wl: list[str]) -> None:
                         snapshot.append(f"US 2Y {float(y2.iloc[0]):.2f}%, 10Y {float(y10.iloc[0]):.2f}%, 10Y-2Y {spread:+.0f} bps")
                     if len(m3) and len(y10):
                         stats.append(f"10Y − 3M <b>{(float(y10.iloc[0]) - float(m3.iloc[0])) * 100:+.0f} bps</b>")
-                    st.html(f'<p class="mb-foot" style="font-size:.8rem">{" &nbsp;·&nbsp; ".join(stats)}. A negative spread (inverted curve) '
-                            "has often come before recessions.</p>")
+                    st.html(f'<p class="mb-foot" style="font-size:.8rem">{" &nbsp;·&nbsp; ".join(stats)}. '
+                            + T("A negative spread (inverted curve) has often come before recessions.") + "</p>")
                 else:
-                    st.caption("Treasury yields unavailable right now.")
+                    st.caption(T("Treasury yields unavailable right now."))
         board, latam_text = latam_board()
         snapshot += latam_text
-        st.html(f'<div class="mb-sec">Mexico and Argentina {src("mkt")}</div>{board}'
-                '<p class="mb-foot">Country stock markets through the US-listed ETFs that track them (EWW, ARGT). '
-                "Argentine dollar rates from DolarApi.</p>")
+        st.html(f'<div class="mb-sec">{T("Mexico and Argentina")} {src("mkt")}</div>{board}'
+                f'<p class="mb-foot">{T("Country stock markets through the US-listed ETFs that track them (EWW, ARGT). Argentine dollar rates from DolarApi.")}</p>')
 
     headlines, failed = data.todays_headlines()
-    st.html(f'<div class="mb-sec">The morning note {src("ai")}</div>')
+    st.html(f'<div class="mb-sec">{T("The morning note")} {src("ai")}</div>')
     note = st.empty()
     n1, n2 = st.columns([2.3, 1], gap="medium")
     with n2:
-        st.html(f'<div class="mb-panel"><div class="mb-h"><b>Latest headlines</b><span>{src("mkt")}</span></div><div class="mb-news">' + "".join(
+        st.html(f'<div class="mb-panel"><div class="mb-h"><b>{T("Latest headlines")}</b><span>{src("mkt")}</span></div><div class="mb-news">' + "".join(
             f'<div><a class="t" href="{esc(h["url"])}" target="_blank" rel="noopener">{esc(h["title"])}</a>'
-            f'<div class="m">{esc(h["source"])} · {h["time"]:%b %d, %-I:%M %p}</div></div>' for h in headlines[:14]) + "</div></div>")
+            f'<div class="m">{esc(h["source"])} · {D(h["time"], "%b %d, %-I:%M %p")}</div></div>' for h in headlines[:14]) + "</div></div>")
         if failed:
-            st.caption("No answer this time from: " + ", ".join(failed))
+            st.caption(T("No answer this time from: ") + ", ".join(failed))
     with n1:
         slot = st.empty()
     if not headlines:
-        note.info("No headlines from the last day could be loaded. Try again in a few minutes.")
+        note.info(T("No headlines from the last day could be loaded. Try again in a few minutes."))
         return
     slot.html('<div class="mb-story"><div class="mb-skel" style="width:94%"></div><div class="mb-skel" style="width:86%"></div>'
-              f'<div class="mb-skel" style="width:60%"></div><p class="mb-note">Writing today\'s note from {min(len(headlines), 40)} headlines…</p></div>')
+              f'<div class="mb-skel" style="width:60%"></div><p class="mb-note">' + T("Writing today's note from {n} headlines…", n=min(len(headlines), 40)) + '</p></div>')
     try:
-        brief = ai.daily_brief(f"{now:%Y-%m-%d}-{now.hour // 6}", "\n".join(snapshot), headlines)
+        brief = ai.daily_brief(f"{now:%Y-%m-%d}-{now.hour // 6}", lang(), "\n".join(snapshot), headlines)
         stories = brief["stories"]
         out = f'<p class="mb-lead">{esc(brief["market_summary"])}</p>'
         if stories:
             out += story_html(stories[0], top=True)
         if len(stories) > 1:
             out += '<div class="mb-grid2">' + "".join(story_html(s) for s in stories[1:]) + "</div>"
-        out += (f'<p class="mb-note">Written by AI at {brief["generated_at"]:%-I:%M %p} ET from {brief["n_headlines"]} headlines '
-                "and the market data on this page, and nothing else. Follow the source links before relying on it.</p>")
+        out += ('<p class="mb-note">' + T("Written by AI at {t} ET from {n} headlines and the market data on this page, and nothing else. Follow the source links before relying on it.",
+                                           t=D(brief["generated_at"], "%-I:%M %p"), n=brief["n_headlines"]) + "</p>")
         slot.html(out)
     except Exception as exc:
-        slot.warning(f"The AI note couldn't be written this time ({exc}). The latest headlines are on the right.")
+        slot.warning(T("The AI note couldn't be written this time ({e}). The latest headlines are on the right.", e=exc))
 
 
 # =========================================================================== Map
 @st.cache_data(ttl=120, show_spinner=False)
-def map_rows() -> list[dict]:
+def map_rows(language: str = "EN") -> list[dict]:
     rows = []
     for t, sector in data.MEGA_CAPS:
         q = safe(data.quote, t)
@@ -215,7 +215,7 @@ def map_rows() -> list[dict]:
         if not q or q["pct"] is None:
             continue
         cap = (p or {}).get("market_cap") or ((p or {}).get("shares") or 0) * q["price"]
-        rows.append({"ticker": t, "sector": sector, "name": (p or {}).get("name", t), "price": q["price"],
+        rows.append({"ticker": t, "sector": T(sector), "name": (p or {}).get("name", t), "price": q["price"],
                      "pct": q["pct"], "cap": cap or 1e11})
     return rows
 
@@ -227,35 +227,35 @@ def movers_table(rows: list[dict], title: str) -> str:
         f'<td class="num {signed_class(r["pct"])}">{sgn(r["pct"])}</td><td class="num">{money(r["cap"], 1)}</td></tr>'
         for r in rows)
     return (f'<div class="mb-panel" style="padding:.7rem .8rem"><div class="mb-h"><b>{title}</b></div>'
-            f'<table class="mb-tbl"><tr><th class="l">Company</th><th>Price</th><th>Change</th><th>Market cap</th></tr>{body}</table></div>')
+            f'<table class="mb-tbl"><tr><th class="l">{T("Company")}</th><th>{T("Price")}</th><th>{T("Change")}</th><th>{T("Market cap")}</th></tr>{body}</table></div>')
 
 
 def page_map() -> None:
-    page_header("Market map", f"The 25 largest US companies, sized by market value and colored by today's move {src('mkt')}")
-    with st.spinner("Loading quotes for the map…"):
-        rows = map_rows()
+    page_header(T("Market map"), T("The 25 largest US companies, sized by market value and colored by today's move") + f" {src('mkt')}")
+    with st.spinner(T("Loading quotes for the map…")):
+        rows = map_rows(lang())
     if not rows:
-        st.info("Quotes are unavailable right now. Try again in a minute.")
+        st.info(T("Quotes are unavailable right now. Try again in a minute."))
         return
     with st.container(key="bare_map"):
         st.plotly_chart(charts.treemap(rows), config=charts.CONFIG, key="treemap")
-    st.html('<p class="mb-foot">Green is up and red is down, capped at ±3% for color. Click a ticker in the tables to open it.</p>')
+    st.html(f'<p class="mb-foot">{T("Green is up and red is down, capped at ±3% for color. Click a ticker in the tables to open it.")}</p>')
     ranked = sorted(rows, key=lambda r: r["pct"], reverse=True)
     c1, c2, c3 = st.columns(3, gap="small")
-    c1.html(movers_table(ranked[:8], "Top gainers"))
-    c2.html(movers_table(list(reversed(ranked[-8:])), "Top decliners"))
+    c1.html(movers_table(ranked[:8], T("Top gainers")))
+    c2.html(movers_table(list(reversed(ranked[-8:])), T("Top decliners")))
     sec = [(name, sym, safe(data.quote, sym)) for name, sym in data.SECTOR_ETFS]
     sec_rows = "".join(
-        f'<tr><td class="l"><a href="{link({"p": "stock", "t": sym})}" target="_self">{sym}</a><span class="co">{name}</span></td>'
+        f'<tr><td class="l"><a href="{link({"p": "stock", "t": sym})}" target="_self">{sym}</a><span class="co">{T(name)}</span></td>'
         f'<td class="num">${q["price"]:,.2f}</td><td class="num {signed_class(q["pct"])}">{sgn(q["pct"] or 0)}</td></tr>'
         for name, sym, q in sec if q)
-    c3.html('<div class="mb-panel" style="padding:.7rem .8rem"><div class="mb-h"><b>Sectors</b></div>'
-            f'<table class="mb-tbl"><tr><th class="l">Sector ETF</th><th>Price</th><th>Change</th></tr>{sec_rows}</table></div>')
+    c3.html(f'<div class="mb-panel" style="padding:.7rem .8rem"><div class="mb-h"><b>{T("Sectors")}</b></div>'
+            f'<table class="mb-tbl"><tr><th class="l">{T("Sector ETF")}</th><th>{T("Price")}</th><th>{T("Change")}</th></tr>{sec_rows}</table></div>')
 
 
 # =========================================================================== Watchlist
 def page_watchlist(wl: list[str]) -> None:
-    page_header("Watchlist", f"Price, performance, risk and value side by side. Click a ticker to open it. {src('mkt')} {src('calc')}")
+    page_header(T("Watchlist"), T("Price, performance, risk and value side by side. Click a ticker to open it.") + f" {src('mkt')} {src('calc')}")
     rf, _ = data.risk_free_rate()
     bench = safe(lambda: data.history(BENCHMARK)["close"])
     rows = []
@@ -290,35 +290,33 @@ def page_watchlist(wl: list[str]) -> None:
             cls = "pos" if v["label"] == "Looks undervalued" else "neg" if v["label"] == "Looks overvalued" else ""
             cells += [f'<td class="num">${v["per_share"]:,.0f}</td>', f'<td class="num {cls}">{pct(v["gap"], 0)}</td>']
         else:
-            cells += ['<td title="DCF needs positive free cash flow and SEC filings">n/m</td>', "<td></td>"]
-        cells.append(f'<td>{dt.date.fromisoformat(e["date"]):%b %-d}</td>' if e else "<td></td>")
+            cells += [f'<td title="{T("DCF needs positive free cash flow and SEC filings")}">n/m</td>', "<td></td>"]
+        cells.append(f'<td>{D(dt.date.fromisoformat(e["date"]), "%b %-d")}</td>' if e else "<td></td>")
         rows.append("<tr>" + "".join(cells) + "</tr>")
-    head = ("<tr><th class='l'>Ticker</th><th>Price</th><th>Today</th><th>1M</th><th>3M</th><th>YTD</th><th>1Y</th>"
-            "<th>Volatility</th><th>Beta</th><th>Max DD</th><th>52-week range</th><th>6 months</th><th>P/E</th>"
-            "<th>Market cap</th><th>DCF value</th><th>Upside</th><th>Earnings</th></tr>")
+    head = "<tr><th class='l'>Ticker</th>" + "".join(f"<th>{T(h)}</th>" for h in (
+        "Price", "Today", "1M", "3M", "YTD", "1Y", "Volatility", "Beta", "Max DD", "52-week range", "6 months", "P/E",
+        "Market cap", "DCF value", "Upside", "Earnings")) + "</tr>"
     st.html(f'<div class="mb-scroll"><table class="mb-tbl">{head}{"".join(rows)}</table></div>'
-            '<p class="mb-foot">Volatility, beta (2 years of weekly returns vs SPY) and max drawdown are calculated here. DCF value is the '
-            "base case with default assumptions (5-year revenue CAGR capped at 0 to 20%, CAPM cost of equity, 2.5% terminal growth); "
-            "open a stock to change them. P/E is trailing twelve months from Finnhub.</p>")
+            f'<p class="mb-foot">{T("Volatility, beta (2 years of weekly returns vs SPY) and max drawdown are calculated here. DCF value is the base case with default assumptions (5-year revenue CAGR capped at 0 to 20%, CAPM cost of equity, 2.5% terminal growth); open a stock to change them. P/E is trailing twelve months from Finnhub.")}</p>')
 
-    st.html('<div class="mb-sec">Manage the list</div>')
+    st.html(f'<div class="mb-sec">{T("Manage the list")}</div>')
     c1, c2 = st.columns([3, 2], gap="medium")
     with c1:
         cols = st.columns(min(len(wl), 4))
         for i, t in enumerate(wl):
-            cols[i % len(cols)].button(f"Remove {t}", key=f"rm_{t}", on_click=remove_from_watchlist, args=(t,),
+            cols[i % len(cols)].button(T("Remove {t}", t=t), key=f"rm_{t}", on_click=remove_from_watchlist, args=(t,),
                                        disabled=len(wl) == 1, width="stretch")
     with c2:
         if len(wl) < MAX_WATCHLIST:
-            qq = st.text_input("Add a stock", key="wl_add", placeholder="Company or ticker")
+            qq = st.text_input(T("Add a stock"), key="wl_add", placeholder=T("Company or ticker"))
             if qq.strip():
                 res = safe(data.search_symbols, qq.strip(), default=[])
                 if res:
-                    ch = st.selectbox("Match", res, key="wl_pick", format_func=lambda r: f"{r['symbol']}  {r['description']}")
-                    st.button(f"Add {ch['symbol']}", type="primary", on_click=add_to_watchlist, args=(ch["symbol"],))
+                    ch = st.selectbox(T("Match"), res, key="wl_pick", format_func=lambda r: f"{r['symbol']}  {r['description']}")
+                    st.button(T("Add {s}", s=ch['symbol']), type="primary", on_click=add_to_watchlist, args=(ch["symbol"],))
         else:
-            st.caption(f"The list holds {MAX_WATCHLIST} stocks.")
-        st.caption("The list is saved in this page's address. Bookmark it to keep it.")
+            st.caption(T("The list holds {n} stocks.", n=MAX_WATCHLIST))
+        st.caption(T("The list is saved in this page's address. Bookmark it to keep it."))
 
 
 # =========================================================================== Compare
@@ -326,14 +324,14 @@ COMPARE_PERIODS = {"1M": 21, "3M": 63, "6M": 126, "YTD": None, "1Y": 252, "3Y": 
 
 
 def page_compare(wl: list[str]) -> None:
-    page_header("Compare", f"Performance, risk and correlation of any stocks against the market {src('calc')}")
+    page_header(T("Compare"), T("Performance, risk and correlation of any stocks against the market") + f" {src('calc')}")
     options = list(dict.fromkeys(wl + [BENCHMARK, "QQQ", "EWW", "ARGT"] + [t for t, _ in data.MEGA_CAPS]))
     c1, c2 = st.columns([3, 1.3], vertical_alignment="bottom")
-    picked = c1.multiselect("Tickers (up to 6)", options, default=list(dict.fromkeys(wl[:5] + [BENCHMARK])), max_selections=6,
+    picked = c1.multiselect(T("Tickers (up to 6)"), options, default=list(dict.fromkeys(wl[:5] + [BENCHMARK])), max_selections=6,
                             key="cmp_pick")
-    period = c2.segmented_control("Period", list(COMPARE_PERIODS), default="1Y", key="cmp_period") or "1Y"
+    period = c2.segmented_control(T("Period"), list(COMPARE_PERIODS), default="1Y", key="cmp_period") or "1Y"
     if not picked:
-        st.info("Pick at least one ticker.")
+        st.info(T("Pick at least one ticker."))
         return
     closes = {}
     for t in picked:
@@ -342,7 +340,7 @@ def page_compare(wl: list[str]) -> None:
             closes[t] = h["close"]
     missing = [t for t in picked if t not in closes]
     if missing:
-        st.caption("No price history right now for: " + ", ".join(missing))
+        st.caption(T("No price history right now for: ") + ", ".join(missing))
     if not closes:
         return
     df = pd.DataFrame(closes).dropna()
@@ -355,7 +353,7 @@ def page_compare(wl: list[str]) -> None:
     stocks = [t for t in df.columns if t != BENCHMARK]
     series = {t: df[t] for t in df.columns}
     if len(stocks) >= 2:
-        series["Equal-weight portfolio"] = analysis.equal_weight_index({t: closes[t] for t in stocks}, len(df) - 1).reindex(df.index).fillna(1.0)
+        series[T("Equal-weight portfolio")] = analysis.equal_weight_index({t: closes[t] for t in stocks}, len(df) - 1).reindex(df.index).fillna(1.0)
     st.plotly_chart(charts.compare_lines(series), config=charts.CONFIG, key="cmp_chart")
 
     rf, _ = data.risk_free_rate()
@@ -378,30 +376,33 @@ def page_compare(wl: list[str]) -> None:
                     f'<td class="num {signed_class(total)}">{pct(total)}</td><td class="num">{pct(ann) if ann is not None else "n/a"}</td>'
                     f'<td class="num">{pct(vol, signed=False) if vol else "n/a"}</td><td class="num">{num(sharpe)}</td>'
                     f'<td class="num neg">{pct(dd)}</td><td class="num">{num(b)}</td></tr>')
-    st.html('<div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">Series</th><th>Price</th><th>Return</th><th>Annualized</th>'
-            f'<th>Volatility</th><th>Sharpe</th><th>Max drawdown</th><th>Beta vs SPY</th></tr>{"".join(rows)}</table></div>'
-            f'<p class="mb-foot">Over the selected period. Sharpe uses the 10-year Treasury as the risk-free rate; beta uses two years of weekly returns. '
-            "The equal-weight portfolio holds the chosen stocks (not SPY) in equal parts, rebalanced daily.</p>")
+    head = "".join(f"<th>{T(h)}</th>" for h in ("Price", "Return", "Annualized", "Volatility", "Sharpe", "Max drawdown", "Beta vs SPY"))
+    st.html(f'<div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">{T("Series")}</th>{head}</tr>{"".join(rows)}</table></div>'
+            f'<p class="mb-foot">{T("Over the selected period. Sharpe uses the 10-year Treasury as the risk-free rate; beta uses two years of weekly returns. The equal-weight portfolio holds the chosen stocks (not SPY) in equal parts, rebalanced daily.")}</p>')
 
     if len(df.columns) >= 2:
         a, b = st.columns([1.2, 1], gap="medium")
         with a:
-            st.html(f'<div class="mb-sec">Correlation of daily returns {src("calc")}</div>')
+            st.html(f'<div class="mb-sec">{T("Correlation of daily returns")} {src("calc")}</div>')
             st.plotly_chart(charts.correlation(df.pct_change().dropna()), config=charts.CONFIG, key="cmp_corr")
         with b:
-            st.html('<div class="mb-sec">How to read it</div>')
-            st.html('<div class="mb-callout">Correlation runs from −1 to +1. Stocks near +1 move together, so holding both adds little '
-                    "diversification; values near 0 or negative smooth a portfolio's ride. Compare the equal-weight portfolio's "
-                    "volatility with the average of the single stocks to see how much diversification is helping.</div>")
+            st.html(f'<div class="mb-sec">{T("How to read it")}</div>')
+            st.html('<div class="mb-callout">' + T("Correlation runs from −1 to +1. Stocks near +1 move together, so holding both adds little diversification; values near 0 or negative smooth a portfolio's ride. Compare the equal-weight portfolio's volatility with the average of the single stocks to see how much diversification is helping.") + '</div>')
 
 
 # =========================================================================== Methodology
 def page_method() -> None:
-    page_header("Methodology", "Where every number comes from and how it is calculated")
-    st.html(f'<div class="mb-callout">Every figure is tagged: {src("mkt")} prices and rates from data providers, {src("rep")} numbers '
-            f'companies filed with the SEC, {src("calc")} figures computed here, {src("ana")} sell-side analyst ratings and '
-            f'{src("ai")} text written by the AI from the data shown.</div>')
-    st.markdown("""
+    page_header(T("Methodology"), T("Where every number comes from and how it is calculated"))
+    st.html('<div class="mb-callout">' + T("Every figure is tagged: {mkt} prices and rates from data providers, {rep} numbers companies filed with the SEC, {calc} figures computed here, {ana} sell-side analyst ratings and {ai} text written by the AI from the data shown.",
+            mkt=src("mkt"), rep=src("rep"), calc=src("calc"), ana=src("ana"), ai=src("ai")) + "</div>")
+    if es():
+        from i18n_es import METHOD_ES
+        st.markdown(METHOD_ES)
+    else:
+        st.markdown(METHOD_EN)
+
+
+METHOD_EN = """
 #### Data sources (all free tiers)
 | What | Source | Freshness |
 |---|---|---|
@@ -447,10 +448,10 @@ value minus net debt, per share. The reverse DCF solves for the growth the curre
 DCF scenarios, DCF sensitivity, the 52-week range and the statistical range against the price.
 
 #### AI
-Google Gemini writes the morning note and the stock analysis from the data shown in the app only, with instructions not to add
-facts, recommend trades or set price targets. The app picks a fast available Gemini model and switches if one is overloaded.
+Google Gemini writes the morning note, the news desk read and the stock analysis from the data shown in the app only, with
+instructions not to add facts or set price targets. The stock take gives a Buy / Hold / Sell lean, labeled as a model opinion. The app picks a fast available Gemini model and switches if one is overloaded.
 
 #### Limits
 Free data can be delayed or briefly unavailable; every number shows its time. SEC tag coverage varies by company. Nothing here
 is investment advice.
-""")
+"""

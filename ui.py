@@ -86,9 +86,9 @@ h1, h2, h3, h4 {{ font-family: 'Inter', system-ui, sans-serif !important; letter
   letter-spacing: -0.02em; white-space: nowrap; }}
 .mb-logo .mark {{ width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg,#3B7BFF,#16C784);
   display: inline-flex; align-items: center; justify-content: center; color: #FFF; font-size: 0.8rem; font-weight: 800; }}
-.mb-logo small {{ display: block; color: #8FA3C2; font-weight: 500; font-size: 0.7rem; letter-spacing: 0; }}
+.mb-logo small {{ display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem; color: #8FA3C2; font-weight: 500; font-size: 0.7rem; letter-spacing: 0; }}
 .st-key-topbar [data-testid="stButtonGroup"] button {{ background: transparent; border: none; color: #C9D6EA;
-  font-weight: 500; padding: 0.3rem 0.75rem; min-height: 2.1rem; }}
+  font-weight: 500; padding: 0.3rem 0.6rem; min-height: 2.1rem; }}
 .st-key-topbar [data-testid="stButtonGroup"] button:hover {{ background: var(--navy2); color: #FFF; }}
 .st-key-topbar [data-testid="stButtonGroup"] button[aria-checked="true"],
 .st-key-topbar [data-testid="stButtonGroup"] button[kind="segmented_controlActive"] {{ background: var(--navy2); color: #FFF; box-shadow: inset 0 -2px 0 var(--accent); }}
@@ -342,11 +342,13 @@ def signed_class(x: float | None) -> str:
 
 
 SOURCE_LABELS = {"mkt": "Market data", "rep": "Reported", "calc": "Calculated", "ai": "AI-written", "ana": "Analysts"}
+SOURCE_LABELS_ES = {"mkt": "Datos de mercado", "rep": "Reportado", "calc": "Calculado", "ai": "Escrito por IA", "ana": "Analistas"}
 
 
 def src(kind: str) -> str:
     """Provenance tag: market data, reported (SEC filings), calculated here, analysts, or AI-written."""
-    return f'<span class="src {kind}">{SOURCE_LABELS[kind]}</span>'
+    labels = SOURCE_LABELS_ES if st.session_state.get("lang_sel") == "ES" else SOURCE_LABELS
+    return f'<span class="src {kind}">{labels[kind]}</span>'
 
 
 def range_bar(low: float | None, high: float | None, value: float | None, fmt: str = "{:,.2f}",
@@ -393,4 +395,6 @@ def link(params: dict) -> str:
     w = st.query_params.get("w")
     if w and "w" not in keep:
         keep["w"] = w
+    if st.session_state.get("lang_sel") == "ES":
+        keep["lang"] = "es"
     return "?" + "&".join(f"{k}={html.escape(str(v))}" for k, v in keep.items())

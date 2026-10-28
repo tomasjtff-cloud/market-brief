@@ -153,6 +153,13 @@ def _call(prompt: str, timeout: int = 25) -> dict:
     raise AIError(f"Gemini didn't accept the request ({last_error}).")
 
 
+def language_rule(lang: str) -> str:
+    if lang == "ES":
+        return ("- Write every text value in professional, neutral Latin American Spanish (finance vocabulary as used in Mexico and "
+                "Argentina). Keep JSON keys and fixed values such as Buy/Hold/Sell, Low/Medium/High and Positive/Mixed/Negative in English.")
+    return "- Write in English."
+
+
 RULES = """STRICT RULES
 - Use ONLY the facts in the data below. Do not add facts, numbers, quotes, dates or events that are not there.
 - If something is unclear, say so briefly or leave it out.
@@ -165,6 +172,7 @@ RULES = """STRICT RULES
 BRIEF_PROMPT = """You are a buy-side market analyst writing today's short morning note.
 
 {rules}
+{language}
 - Prefer market-moving news: central banks, rates, inflation, jobs, earnings of large companies, major geopolitics, big index moves.
 - Merge headlines about the same event into one story.
 
@@ -186,7 +194,7 @@ HEADLINES
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
-def daily_brief(slot: str, _snapshot: str, _headlines: list[dict]) -> dict:
+def daily_brief(slot: str, lang: str, _snapshot: str, _headlines: list[dict]) -> dict:
     """Cached per 6-hour slot (the leading underscore keeps the inputs out of the cache key)."""
     used = _headlines[:40]
     lines = [
@@ -195,7 +203,7 @@ def daily_brief(slot: str, _snapshot: str, _headlines: list[dict]) -> dict:
         for i, h in enumerate(used, 1)
     ]
     now = dt.datetime.now(ET)
-    prompt = BRIEF_PROMPT.format(rules=RULES, now=f"{now:%Y-%m-%d %H:%M} ET", snapshot=_snapshot, headlines="\n".join(lines))
+    prompt = BRIEF_PROMPT.format(rules=RULES, language=language_rule(lang), now=f"{now:%Y-%m-%d %H:%M} ET", snapshot=_snapshot, headlines="\n".join(lines))
     out = _call(prompt)
 
     stories = []
@@ -229,6 +237,7 @@ STOCK_RULES = """STRICT RULES
 STOCK_PROMPT = """You are an equity analyst at an asset manager writing a one-page view on {ticker} ({name}).
 
 {rules}
+{language}
 - The valuation numbers come from a simple DCF with the stated assumptions: present them as model outputs that
   depend on those assumptions, not as facts.
 - Scenarios must be qualitative and tied to the data (growth, margins, valuation, news). Do not invent probabilities.
@@ -257,14 +266,14 @@ RECENT NEWS
 
 
 @st.cache_data(ttl=12 * 3600, show_spinner=False)
-def stock_take(ticker: str, name: str, day: str, assumptions: str, _data_text: str, _news: list[dict]) -> dict:
+def stock_take(ticker: str, name: str, day: str, assumptions: str, lang: str, _data_text: str, _news: list[dict]) -> dict:
     news_lines = [
         f"- {n['time']:%b %d} | {n['source']} | {n['title']}" + (f" — {n['summary'][:250]}" if n.get("summary") else "")
         for n in _news[:12] if n.get("time")
     ] or ["- No company news in the last 7 days."]
     now = dt.datetime.now(ET)
     prompt = STOCK_PROMPT.format(
-        ticker=ticker, name=name, rules=STOCK_RULES, now=f"{now:%Y-%m-%d %H:%M} ET",
+        ticker=ticker, name=name, rules=STOCK_RULES, language=language_rule(lang), now=f"{now:%Y-%m-%d %H:%M} ET",
         data=_data_text, news="\n".join(news_lines),
     )
     out = _call(prompt)
@@ -278,9 +287,10 @@ def stock_take(ticker: str, name: str, day: str, assumptions: str, _data_text: s
 
 # --------------------------------------------------------------------------- news desk
 DESK_PROMPT = """You are the head of a buy-side news desk writing today's read of the news for a portfolio manager
-who invests in the US, Mexico and Argentina. Headlines may be in English or Spanish; always write in English.
+who invests in the US, Mexico and Argentina. Headlines may be in English or Spanish.
 
 {rules}
+{language}
 - Each view must be built from the headlines of that section (and the FX and rates data where relevant).
 - If a section has few or no relevant headlines, say so in one sentence instead of guessing.
 - "tone" is the overall market tone the headlines suggest for that area: "Positive", "Mixed" or "Negative".
@@ -303,7 +313,7 @@ FX AND RATES (as of {now})
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
-def news_view(slot: str, _fx_text: str, _buckets: dict) -> dict:
+def news_view(slot: str, lang: str, _fx_text: str, _buckets: dict) -> dict:
     """AI read of the news desk, cached per 3-hour slot."""
     blocks = []
     for name, items in _buckets.items():
@@ -312,7 +322,7 @@ def news_view(slot: str, _fx_text: str, _buckets: dict) -> dict:
         blocks.append(f"HEADLINES: {name}\n" + ("\n".join(lines) if lines else "- (none)"))
     sector_names = [k for k in _buckets if k not in ("USA", "Mexico", "Argentina", "World")]
     now = dt.datetime.now(ET)
-    prompt = DESK_PROMPT.format(rules=RULES, now=f"{now:%Y-%m-%d %H:%M} ET", fx=_fx_text,
+    prompt = DESK_PROMPT.format(rules=RULES, language=language_rule(lang), now=f"{now:%Y-%m-%d %H:%M} ET", fx=_fx_text,
                                 sector_keys=", ".join(f'"{s}": {{...}}' for s in sector_names), sections="\n\n".join(blocks))
     out = _call(prompt, timeout=50)
     out["generated_at"] = now
