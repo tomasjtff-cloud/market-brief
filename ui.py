@@ -228,6 +228,20 @@ a.mb-card:hover {{ border-color: var(--faint); transform: translateY(-1px); }}
 .mb-p b {{ color: var(--ink); }}
 .mb-chip {{ display: inline-block; margin-bottom: 0.25rem; }}
 
+/* ---------- news desk ---------- */
+.mb-sub {{ color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase;
+  margin: 0.9rem 0 0.4rem; display: flex; gap: 0.5rem; align-items: center; }}
+.mb-sub:first-child {{ margin-top: 0; }}
+.mb-tagx {{ display: inline-block; font-size: 0.66rem; color: var(--muted); background: var(--flat-bg); border-radius: 4px;
+  padding: 0.02rem 0.35rem; margin-left: 0.3rem; }}
+.mb-ul {{ margin: 0 0 0.5rem 1.1rem; padding: 0; }}
+.mb-ul li {{ color: var(--body); font-size: 0.86rem; line-height: 1.5; margin-bottom: 0.25rem; }}
+.mb-tones {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 0.5rem; margin-bottom: 0.6rem; }}
+.mb-tone {{ background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--faint); border-radius: 8px; padding: 0.5rem 0.7rem; }}
+.mb-tone b {{ display: block; color: var(--ink); font-size: 0.84rem; font-weight: 650; }}
+.mb-tone span {{ color: var(--muted); font-size: 0.72rem; }}
+.mb-tone.up {{ border-left-color: var(--up); }} .mb-tone.down {{ border-left-color: var(--down); }} .mb-tone.hold {{ border-left-color: var(--ai); }}
+
 /* ---------- news & note ---------- */
 .mb-lead {{ font-size: 1.05rem; line-height: 1.65; color: var(--ink); margin: 0 0 0.9rem; max-width: 95ch; }}
 .mb-story {{ background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem 1.05rem 0.8rem; }}

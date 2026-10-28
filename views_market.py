@@ -411,10 +411,21 @@ def page_method() -> None:
 | Treasury yields (1 month to 30 years) | FRED, St. Louis Fed | Daily, previous business day |
 | Bitcoin | CoinGecko | About every 10 minutes |
 | Argentine dollar rates | DolarApi | About every 15 minutes |
-| Headlines | CNBC, MarketWatch, WSJ Markets, Federal Reserve (RSS) and Finnhub | Every 30 minutes |
+| Headlines, USA | CNBC, MarketWatch, WSJ Markets, Federal Reserve (RSS) and Finnhub | Every 30 minutes |
+| Headlines, Mexico | El Financiero (economy, markets and business sections), Expansión, El Economista (RSS) | Every 30 minutes |
+| Headlines, Argentina | Ámbito (economy and finance), Infobae economy (RSS) | Every 30 minutes |
+| Headlines, World and sectors | BBC Business, CNBC World, DW Business, Mining.com, TechCrunch AI, OilPrice, CoinDesk (RSS), Finnhub forex, M&A and crypto news | Every 30 minutes |
+| Exchange rates vs the dollar | ECB reference rates via Frankfurter | Daily |
+| Argentina country risk (EMBI) | ArgentinaDatos | Daily |
+| Fed funds rate | FRED, St. Louis Fed | Daily |
 
 Indices are shown through the ETFs that track them (SPY, QQQ, DIA, IWM; EWW for Mexico, ARGT for Argentina), because index
 levels aren't on free data plans. A shared rate limiter keeps the app within each provider's free per-minute limits.
+
+#### News desk
+Headlines are grouped by region according to the feed they come from, and by sector with an English and Spanish keyword
+list (a headline can be in more than one sector). The AI read is written from those headlines and the exchange-rate and
+interest-rate data on the page, every 3 hours, and gives each region and sector a tone: positive, mixed or negative.
 
 #### Risk and performance
 Volatility is the annualized standard deviation of daily log returns over a year. Beta is the slope of weekly returns on SPY

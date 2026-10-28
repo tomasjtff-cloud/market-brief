@@ -9,6 +9,7 @@ Everything runs on free data sources and free hosting, and works on a phone.
 | Page | Content |
 |---|---|
 | **Markets** | Index cards with day ranges, sector performance (SPDR ETFs), the US Treasury yield curve vs a month ago with 10Y−2Y and 10Y−3M spreads, Mexico and Argentina (EWW, ARGT, USD/MXN, official, MEP and blue dollar), watchlist rail with sparklines, upcoming earnings, an AI morning note with sources and the latest headlines |
+| **News** | A news desk: headlines by region (USA, Mexico, Argentina, World) and by sector (tech & AI, energy, mining & metals, banks, health care, consumer, industrials & autos, real estate, crypto) from official publisher RSS feeds, exchange rates (ECB reference rates, Argentina's official, MEP, CCL and blue dollars and country risk) and interest rates, with an AI read and a tone for each region and sector |
 | **Map** | The 25 largest US companies as a treemap sized by market value and colored by today's move, plus top gainers, decliners and sectors |
 | **Watchlist** | Up to eight stocks in one table: price, returns (1D to 1Y), volatility, beta, max drawdown, 52-week range, 6-month sparkline, P/E, market cap, DCF value, upside and next earnings |
 | **Compare** | Up to six stocks rebased to 100 against SPY and an equal-weight portfolio, with return, volatility, Sharpe, drawdown, beta and a correlation heatmap |
@@ -43,7 +44,9 @@ Everything runs on free data sources and free hosting, and works on a phone.
 | Treasury yield curve | FRED, Federal Reserve Bank of St. Louis |
 | Bitcoin | CoinGecko |
 | Argentine dollar rates (official, MEP, blue) | DolarApi |
-| Headlines | CNBC, MarketWatch, WSJ Markets and Federal Reserve RSS feeds |
+| Headlines | RSS feeds from CNBC, MarketWatch, WSJ, the Federal Reserve, El Financiero, Expansión, El Economista, Ámbito, Infobae, BBC, DW, Mining.com, TechCrunch, OilPrice and CoinDesk, plus Finnhub news |
+| Exchange rates vs the dollar | ECB reference rates via Frankfurter |
+| Argentina country risk | ArgentinaDatos |
 
 ## Tech stack
 
@@ -54,6 +57,8 @@ app.py            router: top bar, ticker tape, pages
 common.py         navigation, watchlist state, formatting, top bar and ticker tape
 views_market.py   Markets, Map, Watchlist, Compare and Methodology pages
 views_stock.py    the stock quote page and its sections
+views_news.py     the news desk page
+news.py           news feeds by region and the sector keyword classifier
 charts.py         Plotly charts (price, fan, treemap, yield curve, football field…)
 data.py           all external data sources, with caching and rate limiting
 fundamentals.py   SEC XBRL parsing into revenue, FCF, cash, debt, shares

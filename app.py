@@ -12,7 +12,7 @@ import streamlit as st
 st.set_page_config(page_title="Market Brief", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
 
 # Streamlit Cloud keeps imported modules between deploys; drop ours if any source file changed.
-_LOCAL = ("ui", "data", "fundamentals", "analysis", "ai", "charts", "common", "views_market", "views_stock")
+_LOCAL = ("ui", "data", "news", "fundamentals", "analysis", "ai", "charts", "common", "views_market", "views_stock", "views_news")
 
 
 def _stale() -> bool:
@@ -31,6 +31,7 @@ from common import current_page, get_watchlist, init_state, ticker_tape, top_bar
 from ui import inject_css  # noqa: E402
 import views_market as vm  # noqa: E402
 import views_stock as vs  # noqa: E402
+import views_news as vn  # noqa: E402
 
 for _name in _LOCAL:
     if _name in sys.modules:
@@ -45,6 +46,8 @@ ticker_tape(wl)
 page = current_page()
 if page == "Markets":
     vm.page_markets(wl)
+elif page == "News":
+    vn.page_news()
 elif page == "Map":
     vm.page_map()
 elif page == "Watchlist":

@@ -408,13 +408,18 @@ def _norm(title: str) -> str:
     return re.sub(r"[^a-z0-9 ]", "", title.lower())
 
 
+def _similar(a: str, b: str, threshold: float) -> bool:
+    sm = SequenceMatcher(None, a, b)
+    return sm.real_quick_ratio() >= threshold and sm.quick_ratio() >= threshold and sm.ratio() >= threshold
+
+
 def dedupe(items: list[dict], threshold: float = 0.8) -> list[dict]:
     """Newest first, dropping headlines that are near-copies of one already kept."""
     floor = dt.datetime.min.replace(tzinfo=ET)
     kept, kept_norm = [], []
     for it in sorted(items, key=lambda x: x["time"] or floor, reverse=True):
         n = _norm(it["title"])
-        if not n or any(SequenceMatcher(None, n, k).ratio() >= threshold for k in kept_norm):
+        if not n or any(_similar(n, k, threshold) for k in kept_norm):
             continue
         kept.append(it)
         kept_norm.append(n)
@@ -435,6 +440,95 @@ def todays_headlines() -> tuple[list[dict], list[str]]:
     cutoff = now - dt.timedelta(hours=hours)
     recent = [i for i in rss + fh if i["time"] and i["time"] >= cutoff]
     return dedupe(recent), failed
+
+
+# --------------------------------------------------------------------------- news desk
+def _fetch_feed(region: str, source: str, spec) -> tuple[list[dict], str | None]:
+    import news
+
+    url, filters = (spec if isinstance(spec, tuple) else (spec, None))
+    try:
+        parsed = feedparser.parse(_get_bytes(url, headers={"User-Agent": "Mozilla/5.0 (personal market dashboard)"}))
+        out = []
+        for e in parsed.entries[:40]:
+            t = e.get("published_parsed") or e.get("updated_parsed")
+            when = dt.datetime(*t[:6], tzinfo=dt.timezone.utc).astimezone(ET) if t else None
+            title, link = _clean(e.get("title")), e.get("link")
+            if not title or not link or not news.keep(link, filters):
+                continue
+            item = _news_item(source, title, _clean(e.get("summary"))[:400], link, when)
+            item["region"] = region if region in news.REGIONS else None
+            out.append(item)
+        return out, (None if out else source)
+    except Exception:
+        return [], source
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def finnhub_news(category: str = "general") -> list[dict]:
+    raw = _finnhub("/news", category=category) or []
+    return [
+        _news_item(n.get("source") or "Finnhub", _clean(n.get("headline")), _clean(n.get("summary"))[:400], n.get("url"),
+                   dt.datetime.fromtimestamp(n["datetime"], tz=ET) if n.get("datetime") else None)
+        for n in raw if n.get("headline") and n.get("url")
+    ]
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def news_desk() -> tuple[list[dict], list[str]]:
+    """Every news-desk headline, tagged with a region (from its feed) and sectors (from keywords), newest first."""
+    import news
+    from concurrent.futures import ThreadPoolExecutor
+
+    jobs = [(region, source, spec) for region, feeds in news.FEEDS.items() for source, spec in feeds.items()]
+    items, failed = [], []
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for got, bad in pool.map(lambda j: _fetch_feed(*j), jobs):
+            items += got
+            if bad:
+                failed.append(bad)
+    for category, region in (("general", "USA"), ("forex", "World"), ("merger", None), ("crypto", None)):
+        try:
+            for it in finnhub_news(category):
+                it = dict(it, region=region)
+                items.append(it)
+        except Exception:
+            failed.append(f"Finnhub {category}")
+    for it in items:
+        it["sectors"] = news.classify(it["title"], it.get("summary", ""))
+    return dedupe(items), failed
+
+
+# --------------------------------------------------------------------------- FX and rates for the news desk
+ECB_PAIRS = [("USD/MXN", "MXN", False), ("EUR/USD", "EUR", True), ("USD/JPY", "JPY", False), ("GBP/USD", "GBP", True),
+             ("USD/BRL", "BRL", False), ("USD/CNY", "CNY", False), ("USD/CAD", "CAD", False)]
+
+
+@st.cache_data(ttl=3 * 3600, show_spinner=False)
+def fx_reference() -> dict:
+    """ECB reference rates via the free Frankfurter API: latest, previous day and about a week earlier."""
+    start = (dt.date.today() - dt.timedelta(days=14)).isoformat()
+    d = _get_json(f"https://api.frankfurter.dev/v1/{start}..",
+                  params={"base": "USD", "symbols": ",".join(c for _, c, _ in ECB_PAIRS)})
+    days = sorted(d.get("rates", {}))
+    if len(days) < 2:
+        raise DataError("No ECB reference rates available.")
+    out = {}
+    for pair, code, invert in ECB_PAIRS:
+        series = [d["rates"][x].get(code) for x in days]
+        series = [(1 / v if invert else v) if v else None for v in series]
+        if series[-1] is None:
+            continue
+        out[pair] = {"rate": series[-1], "prev": series[-2], "week": series[-6] if len(series) >= 6 else series[0],
+                     "date": days[-1]}
+    return out
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def riesgo_pais() -> dict:
+    """Argentina's country-risk spread (EMBI, basis points) from the free ArgentinaDatos API."""
+    d = _get_json("https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais/ultimo")
+    return {"value": float(d["valor"]), "date": d.get("fecha")}
 
 
 # --------------------------------------------------------------------------- SEC EDGAR

@@ -140,3 +140,13 @@ def test_consensus():
     assert c["n"] == 49 and c["label"] == "Buy" and abs(c["score"] - 184 / 49) < 1e-9
     assert analysis.consensus({"hold": 0}) is None
     assert analysis.consensus({"strongSell": 3})["label"] == "Strong Sell"
+
+
+def test_news_classify():
+    import news
+    assert "Tech & AI" in news.classify("Nvidia unveils new AI chips")
+    assert "Energy" in news.classify("Precio del petróleo sube por tensiones en Medio Oriente")
+    assert "Mining & metals" in news.classify("Codelco, BHP launch $40M copper hunt in northern Chile")
+    assert "Crypto" in news.classify("Bitcoin falls below $80,000")
+    assert news.classify("Said the chair in a speech") == []
+    assert "Tech & AI" not in news.classify("Paid leave plan advances")  # 'AI' must be the acronym, not part of a word

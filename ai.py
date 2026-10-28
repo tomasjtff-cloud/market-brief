@@ -85,7 +85,7 @@ def _thinking_config(model: str) -> dict:
     return {"thinkingBudget": 0} if version < 3 else {"thinkingLevel": "low"}
 
 
-def _post(key: str, model: str, prompt: str, thinking: bool):
+def _post(key: str, model: str, prompt: str, thinking: bool, timeout: int = 25):
     config = {"temperature": 0.2, "responseMimeType": "application/json"}
     if thinking:
         config["thinkingConfig"] = _thinking_config(model)
@@ -93,7 +93,7 @@ def _post(key: str, model: str, prompt: str, thinking: bool):
         GEMINI_URL.format(model=model),
         headers={"x-goog-api-key": key, "Content-Type": "application/json"},
         json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": config},
-        timeout=25,
+        timeout=timeout,
     )
 
 
@@ -104,7 +104,7 @@ def _google_message(resp) -> str:
         return f"HTTP {resp.status_code}"
 
 
-def _call(prompt: str) -> dict:
+def _call(prompt: str, timeout: int = 25) -> dict:
     key = secret("GEMINI_API_KEY")
     if not key:
         raise AIError("GEMINI_API_KEY is missing from the app secrets.")
@@ -126,9 +126,9 @@ def _call(prompt: str) -> dict:
     for model in candidates:
         started = time.time()
         try:
-            resp = _post(key, model, prompt, thinking=True)
+            resp = _post(key, model, prompt, thinking=True, timeout=timeout)
             if resp.status_code == 400 and "thinking" in _google_message(resp).lower():
-                resp = _post(key, model, prompt, thinking=False)  # this model doesn't take the thinking setting
+                resp = _post(key, model, prompt, thinking=False, timeout=timeout)  # this model doesn't take the thinking setting
         except requests.Timeout:
             last_error = f"{model}: timed out"
             print(f"[ai] {model} timed out", flush=True)
@@ -272,5 +272,48 @@ def stock_take(ticker: str, name: str, day: str, assumptions: str, _data_text: s
     out["lean"] = lean if lean in ("Buy", "Hold", "Sell") else None
     conv = str(out.get("conviction", "")).strip().title()
     out["conviction"] = conv if conv in ("Low", "Medium", "High") else None
+    out["generated_at"] = now
+    return out
+
+
+# --------------------------------------------------------------------------- news desk
+DESK_PROMPT = """You are the head of a buy-side news desk writing today's read of the news for a portfolio manager
+who invests in the US, Mexico and Argentina. Headlines may be in English or Spanish; always write in English.
+
+{rules}
+- Each view must be built from the headlines of that section (and the FX and rates data where relevant).
+- If a section has few or no relevant headlines, say so in one sentence instead of guessing.
+- "tone" is the overall market tone the headlines suggest for that area: "Positive", "Mixed" or "Negative".
+
+Return JSON exactly in this shape:
+{{"overview": "3-4 sentences: the big picture across regions today",
+  "regions": {{
+    "USA": {{"tone": "...", "view": "3-4 sentences", "key_points": ["3-4 short points"], "watch": "1 sentence"}},
+    "Mexico": {{...same keys...}}, "Argentina": {{...same keys...}}, "World": {{...same keys...}}}},
+  "sectors": {{{sector_keys}}},
+  "fx_rates": {{"view": "4-5 sentences on the dollar, the Mexican peso, Argentina's exchange rates and gap, and interest rates, using the FX AND RATES data and the headlines",
+               "key_points": ["3-4 short points"]}}}}
+For "sectors" use exactly these keys, each with {{"tone": "...", "view": "2-3 sentences"}}.
+
+FX AND RATES (as of {now})
+{fx}
+
+{sections}
+"""
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def news_view(slot: str, _fx_text: str, _buckets: dict) -> dict:
+    """AI read of the news desk, cached per 3-hour slot."""
+    blocks = []
+    for name, items in _buckets.items():
+        lines = [f"- {h['source']} | {h['time']:%a %b %d %H:%M} ET | {h['title']}"
+                 + (f" — {h['summary'][:160]}" if h.get("summary") else "") for h in items[:10]]
+        blocks.append(f"HEADLINES: {name}\n" + ("\n".join(lines) if lines else "- (none)"))
+    sector_names = [k for k in _buckets if k not in ("USA", "Mexico", "Argentina", "World")]
+    now = dt.datetime.now(ET)
+    prompt = DESK_PROMPT.format(rules=RULES, now=f"{now:%Y-%m-%d %H:%M} ET", fx=_fx_text,
+                                sector_keys=", ".join(f'"{s}": {{...}}' for s in sector_names), sections="\n\n".join(blocks))
+    out = _call(prompt, timeout=50)
     out["generated_at"] = now
     return out
