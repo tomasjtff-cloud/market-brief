@@ -74,6 +74,8 @@ def quote(symbol: str) -> dict:
         "change": q.get("d"),
         "pct": q.get("dp"),  # already in percent, e.g. 1.25 = +1.25%
         "prev_close": q.get("pc"),
+        "high": q.get("h") or None,
+        "low": q.get("l") or None,
         "time": dt.datetime.fromtimestamp(q["t"], tz=ET),
     }
 

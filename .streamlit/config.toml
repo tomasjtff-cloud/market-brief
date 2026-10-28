@@ -1,18 +1,29 @@
 [theme]
-base = "light"
+font = "IBM Plex Sans:https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+headingFont = "Newsreader:https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap"
+headingFontWeights = [600, 600, 600, 600, 600, 600]
+baseRadius = "0.6rem"
+showWidgetBorder = true
+
+[theme.light]
 primaryColor = "#2457D6"
 backgroundColor = "#F4F6F9"
 secondaryBackgroundColor = "#E8ECF2"
 textColor = "#13202F"
 linkColor = "#2457D6"
 borderColor = "#DCE2EA"
-font = "IBM Plex Sans:https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap"
-headingFont = "Newsreader:https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap"
-headingFontWeights = [600, 600, 600, 600, 600, 600]
-baseRadius = "0.6rem"
-showWidgetBorder = true
 greenColor = "#0E8A3E"
 redColor = "#C8362F"
+
+[theme.dark]
+primaryColor = "#6E9BFF"
+backgroundColor = "#0B1220"
+secondaryBackgroundColor = "#152034"
+textColor = "#E8EDF4"
+linkColor = "#8FB2FF"
+borderColor = "#223049"
+greenColor = "#3CCB7F"
+redColor = "#F26B61"
 
 [theme.sidebar]
 backgroundColor = "#0F1C2E"

@@ -196,3 +196,34 @@ def verdict(intrinsic: float, price: float, band: float = 0.15) -> tuple[str, fl
     if gap < -band:
         return "Looks overvalued", gap
     return "Roughly fairly valued", gap
+
+
+def drawdown_series(close: pd.Series, window: int = TRADING_DAYS) -> pd.Series:
+    c = close.iloc[-window:]
+    return c / c.cummax() - 1
+
+
+def default_valuation(f: dict, price: float, beta_: float | None, rf: float,
+                      erp: float = 0.05, tax: float = 0.21, terminal_growth: float = 0.025) -> dict | None:
+    """Base-case DCF with the app's default assumptions, used for the watchlist at a glance.
+
+    Growth = last five years' revenue CAGR capped at 0-20%; WACC from CAPM with beta clipped to 0.5-2.5,
+    cost of debt = risk-free + 1.5 points. Returns None when free cash flow is negative or data is missing.
+    """
+    import fundamentals  # local import keeps this module free of Streamlit
+
+    if f["fcf"].empty or not f["shares"]:
+        return None
+    base_fcf = float(f["fcf"].iloc[-1])
+    if base_fcf <= 0:
+        return None
+    hist_g = fundamentals.revenue_cagr(f["revenue"])
+    growth = float(np.clip(hist_g if hist_g is not None else 0.05, 0.0, 0.20))
+    b = float(np.clip(beta_, 0.5, 2.5)) if beta_ else 1.0
+    w = wacc(rf, b, erp, rf + 0.015, tax, price * f["shares"], f["debt"])
+    try:
+        r = dcf(base_fcf, growth, terminal_growth, w["wacc"], f["net_debt"], f["shares"])
+    except ValueError:
+        return None
+    label, gap = verdict(r.per_share, price)
+    return {"per_share": r.per_share, "gap": gap, "label": label, "growth": growth, "wacc": w["wacc"]}
