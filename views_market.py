@@ -367,7 +367,8 @@ def page_compare(wl: list[str]) -> None:
         if bench is not None and name != BENCHMARK and name in closes:
             b = analysis.beta(closes[name], bench)
         q = safe(data.quote, name) if name in closes else None
-        rows.append(f'<tr><td class="l"><b>{esc(name)}</b></td><td class="num">{f"${q["price"]:,.2f}" if q else ""}</td>'
+        price_txt = f"${q['price']:,.2f}" if q else ""
+        rows.append(f'<tr><td class="l"><b>{esc(name)}</b></td><td class="num">{price_txt}</td>'
                     f'<td class="num {signed_class(total)}">{pct(total)}</td><td class="num">{pct(ann) if ann is not None else "n/a"}</td>'
                     f'<td class="num">{pct(vol, signed=False) if vol else "n/a"}</td><td class="num">{num(sharpe)}</td>'
                     f'<td class="num neg">{pct(dd)}</td><td class="num">{num(b)}</td></tr>')

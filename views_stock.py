@@ -491,7 +491,7 @@ def ai_data_text(c: dict, val: dict | None, out: dict | None) -> str:
         f"Returns: 1M {pct(m['ret_1m'])}, 3M {pct(m['ret_3m'])}, YTD {pct(m['ret_ytd'])}, 1Y {pct(m['ret_1y'])}",
         f"Risk: 1Y volatility {pct(m['volatility'], signed=False)}, 1Y max drawdown {pct(m['max_drawdown'])}, "
         f"2Y weekly beta vs SPY {num(m['beta'])}, 1Y Sharpe {num(m['sharpe'])}",
-        f"52-week range {c['low52']:,.2f} to {c['high52']:,.2f}; P/E TTM {num(met.get('peTTM'), 1)}; market cap {money(c['p'].get('market_cap'))}",
+        f"52-week range {c['low52']:,.2f} to {c['high52']:,.2f}; price-to-earnings ratio (P/E, trailing 12 months) {num(met.get('peTTM'), 1)}; market cap {money(c['p'].get('market_cap'))}",
     ]
     if val:
         f = val["fundamentals"]
