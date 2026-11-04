@@ -13,7 +13,7 @@ st.set_page_config(page_title="Market Brief", page_icon=os.path.join(os.path.dir
                    layout="wide", initial_sidebar_state="collapsed")
 
 # Streamlit Cloud keeps imported modules between deploys; drop ours if any source file changed.
-_LOCAL = ("i18n_es", "i18n", "ui", "data", "news", "fundamentals", "analysis", "ai", "charts", "common", "views_market", "views_stock", "views_news", "portfolio", "store", "views_portfolio", "views_research")
+_LOCAL = ("i18n_es", "i18n", "ui", "data", "news", "fundamentals", "analysis", "ai", "charts", "common", "views_market", "views_stock", "views_news", "portfolio", "store", "views_portfolio", "views_research", "helpbox")
 
 
 def _stale() -> bool:

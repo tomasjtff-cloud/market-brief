@@ -237,6 +237,18 @@ a.mb-card:hover {{ border-color: var(--faint); transform: translateY(-1px); }}
 .mb-p b {{ color: var(--ink); }}
 .mb-chip {{ display: inline-block; margin-bottom: 0.25rem; }}
 
+/* ---------- help boxes ---------- */
+.mb-help {{ display: grid; grid-template-columns: 1.25fr 1fr; gap: 1.6rem; font-size: 0.87rem; line-height: 1.55; color: var(--body); }}
+.mb-help p {{ margin: 0 0 0.6rem; }}
+.mb-help ol, .mb-help ul {{ margin: 0 0 0.4rem 1.1rem; padding: 0; }}
+.mb-help li {{ margin-bottom: 0.35rem; }}
+.mb-help dl {{ margin: 0 0 0.6rem; }}
+.mb-help dl > div {{ padding: 0.35rem 0; border-bottom: 1px solid var(--line); }}
+.mb-help dl > div:last-child {{ border-bottom: 0; }}
+.mb-help dt {{ color: var(--ink); font-weight: 600; font-size: 0.84rem; }}
+.mb-help dd {{ margin: 0.1rem 0 0; }}
+@media (max-width: 900px) {{ .mb-help {{ grid-template-columns: 1fr; gap: 0.4rem; }} }}
+
 /* ---------- news desk ---------- */
 .mb-sub {{ color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase;
   margin: 0.9rem 0 0.4rem; display: flex; gap: 0.5rem; align-items: center; }}

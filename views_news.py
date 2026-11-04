@@ -6,6 +6,8 @@ import datetime as dt
 
 import streamlit as st
 
+import helpbox as hp
+
 import ai
 import data
 import news
@@ -136,6 +138,7 @@ def ai_panel(view: dict | None, extra: str = "") -> str:
 def page_news() -> None:
     now = dt.datetime.now(data.ET)
     page_header(T("News desk"), T("Headlines by region and by sector from official publisher feeds, exchange rates and interest rates, and an AI read of what it means for markets."))
+    hp.show("news")
     with st.spinner(T("Collecting headlines from about 20 sources…")):
         items, failed = data.news_desk()
     groups = news.buckets(items, now)

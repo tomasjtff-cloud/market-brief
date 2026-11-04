@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+import helpbox as hp
+
 import ai
 import analysis
 import charts
@@ -132,6 +134,7 @@ def story_html(s: dict, top: bool = False) -> str:
 def page_markets(wl: list[str]) -> None:
     now = dt.datetime.now(data.ET)
     page_header(T("Markets") + " · " + (D(now, "%A %-d de %B") if es() else D(now, "%A, %B %-d")), status_line(), clocks=True)
+    hp.show("markets")
     snapshot = index_cards()
 
     left, right = st.columns([2.3, 1], gap="medium")
@@ -232,6 +235,7 @@ def movers_table(rows: list[dict], title: str) -> str:
 
 def page_map() -> None:
     page_header(T("Market map"), T("The 25 largest US companies, sized by market value and colored by today's move") + f" {src('mkt')}")
+    hp.show("map")
     with st.spinner(T("Loading quotes for the map…")):
         rows = map_rows(lang())
     if not rows:
@@ -256,6 +260,7 @@ def page_map() -> None:
 # =========================================================================== Watchlist
 def page_watchlist(wl: list[str]) -> None:
     page_header(T("Watchlist"), T("Price, performance, risk and value side by side. Click a ticker to open it.") + f" {src('mkt')} {src('calc')}")
+    hp.show("watchlist")
     rf, _ = data.risk_free_rate()
     bench = safe(lambda: data.history(BENCHMARK)["close"])
     rows = []
@@ -325,6 +330,7 @@ COMPARE_PERIODS = {"1M": 21, "3M": 63, "6M": 126, "YTD": None, "1Y": 252, "3Y": 
 
 def page_compare(wl: list[str]) -> None:
     page_header(T("Compare"), T("Performance, risk and correlation of any stocks against the market") + f" {src('calc')}")
+    hp.show("compare")
     options = list(dict.fromkeys(wl + [BENCHMARK, "QQQ", "EWW", "ARGT"] + [t for t, _ in data.MEGA_CAPS]))
     c1, c2 = st.columns([3, 1.3], vertical_alignment="bottom")
     picked = c1.multiselect(T("Tickers (up to 6)"), options, default=list(dict.fromkeys(wl[:5] + [BENCHMARK])), max_selections=6,

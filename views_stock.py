@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+import helpbox as hp
+
 import ai
 import analysis
 import charts
@@ -139,6 +141,9 @@ def page_stock(wl: list[str]) -> None:
     section = choice(st.segmented_control, "Section", SECTIONS, key=f"sec_{t}", default="Summary",
                      label_visibility="collapsed") or "Summary"
     st.html('<div style="height:.2rem"></div>')
+    hp.show({"Summary": "stock_summary", "Chart": "stock_chart", "Financials": "stock_financials", "Valuation": "stock_valuation",
+             "Outlook": "stock_outlook", "Compare": "stock_compare", "News": "stock_news",
+             "Analysts & AI take": "stock_analysts"}.get(section, ""))
     ctx = {"t": t, "q": q, "p": p, "hist": hist, "bench": bench, "rf": rf, "rf_label": rf_label, "m": m, "met": met,
            "high52": high52, "low52": low52, "wl": wl}
     {"Summary": summary, "Chart": chart_section, "Financials": financials, "Valuation": valuation, "Outlook": outlook,

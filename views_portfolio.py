@@ -12,6 +12,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+import helpbox as hp
+
 import ai
 import analysis
 import charts
@@ -121,6 +123,9 @@ def page_portfolio() -> None:
     section = choice(st.segmented_control, "Portfolio section", SECTIONS, key="pf_section", default="Overview",
                      label_visibility="collapsed") or "Overview"
     st.html('<div style="height:.2rem"></div>')
+    hp.show({"Overview": "pf_overview", "Transactions": "pf_transactions", "Risk": "pf_risk", "Investor profile": "pf_profile",
+             "News impact": "pf_news", "Optimization": "pf_optimization", "Recommendations": "pf_recommendations",
+             "Simulator": "pf_simulator"}.get(section, ""))
     {"Overview": overview, "Transactions": transactions, "Risk": risk_section, "Investor profile": profile_section,
      "News impact": news_impact, "Optimization": optimization, "Recommendations": recommendations,
      "Simulator": simulator}[section](s)

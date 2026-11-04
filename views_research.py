@@ -9,6 +9,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+import helpbox as hp
+
 import analysis
 import charts
 import data
@@ -94,6 +96,7 @@ def track(p: dict) -> dict:
 # =========================================================================== page
 def page_research() -> None:
     page_header(T("Research"), T("Investment pitches with a live track record: each call is measured against the S&P 500 from the day it was published."))
+    hp.show("research")
     mode = choice(st.segmented_control, "Research mode", ["Published pitches", "Write a pitch"], key="rs_mode",
                   default="Published pitches", label_visibility="collapsed") or "Published pitches"
     if mode == "Write a pitch":
