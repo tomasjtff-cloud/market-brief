@@ -483,7 +483,7 @@ def frontier_v2(frontier: list[dict], current: dict, selected: dict, anchors: di
                                  mode="markers+text", text=list(assets), textposition="top center",
                                  textfont=dict(size=10, color=p["faint"]), marker=dict(size=6, color=p["faint"], opacity=0.7),
                                  hovertemplate="%{text}<br>" + T("Risk") + " %{x:.1f}% · " + T("Return") + " %{y:.1f}%<extra></extra>"))
-    custom = [[", ".join(f"{k} {v:.0%}" for k, v in sorted(r["weights"].items(), key=lambda kv: -kv[1])[:4])] for r in frontier]
+    custom = [[", ".join(f"{k} {v:.0%}" for k, v in sorted(r.get("weights", {}).items(), key=lambda kv: -kv[1])[:4])] for r in frontier]
     fig.add_trace(go.Scatter(x=[r["vol"] * 100 for r in frontier], y=[r["ret"] * 100 for r in frontier], mode="lines",
                              line=dict(color=p["accent"], width=3.2, shape="spline", smoothing=0.6), customdata=custom,
                              hovertemplate=T("Risk") + " %{x:.1f}% · " + T("Return") + " %{y:.1f}%<br>%{customdata[0]}<extra></extra>"))

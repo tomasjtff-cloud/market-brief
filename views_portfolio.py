@@ -621,7 +621,7 @@ def optimise_for(s: dict, include_div: bool) -> tuple[dict | None, dict]:
         meta.setdefault(t, {"etf": t in pf.KNOWN_ETFS, "name": t, "sector": pf.ETF_SECTOR.get(t, "Other")})
     caps = caps_for(universe, meta, prof)
     rf, _ = data.risk_free_rate()
-    key = json.dumps([universe, prof["name"], dt.date.today().isoformat()])
+    key = json.dumps([universe, prof["name"], dt.date.today().isoformat(), "frontier-v2"])
     with st.spinner(T("Optimising on two years of prices (the first run can take up to a minute on the free data plan)…")):
         opt = _opt_cached(key, tuple(universe), caps, prof["target_vol"], rf)
     return opt, prof
@@ -647,6 +647,9 @@ def optimization(s: dict) -> None:
     include = st.toggle(T("Also consider diversifiers I don't own (S&P 500, bonds, gold, international and emerging markets ETFs)"),
                         value=True, key="pf_opt_div")
     opt, prof = optimise_for(s, include)
+    if opt and opt.get("frontier") and "weights" not in opt["frontier"][0]:  # result cached by an older version
+        _opt_cached.clear()
+        opt, prof = optimise_for(s, include)
     if not opt or not opt.get("frontier"):
         st.info(T("The optimiser needs price history for at least two assets. Add positions or turn on the diversifiers."))
         return
@@ -671,7 +674,7 @@ def optimization(s: dict) -> None:
                                value=start, format_func=lambda i: f"{frontier[i]['vol'] * 100:.1f}%", key=f"pf_opt_risk_{len(frontier)}")
         sel = frontier[idx]
 
-    sel_w = sel["weights"]
+    sel_w = sel.get("weights", {})
     bt_now = backtest_stats(opt, s["weights"], s["total"])
     bt_sel = backtest_stats(opt, sel_w, s["total"])
     sel_label = {"profile": T("Your profile"), "gmv": T("Minimum variance"), "max_sharpe": T("Maximum Sharpe")}.get(anchor_key or "", T("Selected"))
