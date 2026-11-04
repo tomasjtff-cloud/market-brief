@@ -600,7 +600,7 @@ HELP: dict[str, dict[str, dict]] = {
             "what": "Shows the best possible mixes of your assets (plus optional diversifiers) for each level of risk, where your portfolio sits today, and how to move towards the mix that fits your profile.",
             "how": [
                 "The blue curve is the efficient frontier: for each level of risk (horizontal axis) it gives the highest expected return (vertical axis). Portfolios below it take risk without being paid for it.",
-                "The green zone is the risk your profile is comfortable with. 'Best for your profile' is the point with the most expected return inside that zone.",
+                "The green zone is the risk your profile is comfortable with. 'Recommended for your profile' is the portfolio the app recommends: the point with the most expected return inside that zone. 'Your portfolio today' (the diamond) is what you hold now.",
                 "Pick a portfolio with the buttons, or 'Choose my own risk level' to slide along the curve. The card on the right compares it with yours: green means better for you.",
                 "'How the mix changes' and 'Moves to get there' translate the selected portfolio into what to buy and sell, in % and dollars.",
             ],
@@ -617,7 +617,7 @@ HELP: dict[str, dict[str, dict]] = {
             "what": "Muestra las mejores mezclas posibles de tus activos (más diversificadores opcionales) para cada nivel de riesgo, dónde está tu portafolio hoy y cómo acercarte a la mezcla que corresponde a tu perfil.",
             "how": [
                 "La curva azul es la frontera eficiente: para cada nivel de riesgo (eje horizontal) da el mayor rendimiento esperado (eje vertical). Los portafolios por debajo asumen riesgo sin que se les pague por él.",
-                "La zona verde es el riesgo con el que tu perfil está cómodo. 'El mejor para tu perfil' es el punto con más rendimiento esperado dentro de esa zona.",
+                "La zona verde es el riesgo con el que tu perfil está cómodo. 'Recomendado para tu perfil' es el portafolio que recomienda la app: el punto con más rendimiento esperado dentro de esa zona. 'Tu portafolio hoy' (el rombo) es lo que tenés ahora.",
                 "Elegí un portafolio con los botones, o 'Elegir mi nivel de riesgo' para recorrer la curva. La tarjeta de la derecha lo compara con el tuyo: verde significa mejor para vos.",
                 "'Cómo cambia la mezcla' y 'Movimientos para llegar' traducen el portafolio elegido en qué comprar y vender, en % y en dólares.",
             ],

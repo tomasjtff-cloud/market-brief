@@ -268,6 +268,10 @@ a.mb-card:hover {{ border-color: var(--faint); transform: translateY(-1px); }}
   color: var(--body); font-size: 0.88rem; line-height: 1.55; margin-bottom: 0.7rem; }}
 .mb-explain b {{ color: var(--ink); }}
 .st-key-panel_frontier {{ background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0.7rem 0.8rem 0.5rem; gap: 0.2rem; }}
+.mb-recnote {{ border-left: 3px solid var(--faint); background: var(--surface); border-radius: 8px; padding: 0.55rem 0.85rem;
+  margin: 0.2rem 0 0.7rem; font-size: 0.87rem; color: var(--body); line-height: 1.5; }}
+.mb-recnote.rec {{ border-left-color: var(--up, #16C784); }}
+.mb-recnote b {{ color: var(--ink); }}
 .mb-cmp {{ background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem 0.8rem; }}
 .mb-cmp .hd {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 0.6rem; margin-bottom: 0.7rem; }}
 .mb-cmp .hd b {{ color: var(--ink); font-size: 1.05rem; font-weight: 650; }}

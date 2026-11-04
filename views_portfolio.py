@@ -645,7 +645,7 @@ def backtest_stats(opt: dict, weights: dict[str, float], value: float) -> dict:
     return r or {}
 
 
-PICKS = ["Best for your profile", "Minimum variance", "Maximum Sharpe", "Choose my own risk level"]
+PICKS = ["Recommended for your profile", "Minimum variance", "Maximum Sharpe", "Choose my own risk level"]
 
 
 def optimization(s: dict) -> None:
@@ -669,7 +669,7 @@ def optimization(s: dict) -> None:
 
     pick = choice(st.segmented_control, T("Portfolio to compare"), PICKS, key="pf_opt_pick", default=PICKS[0],
                   label_visibility="collapsed") or PICKS[0]
-    anchor_key = {"Best for your profile": "profile", "Minimum variance": "gmv", "Maximum Sharpe": "max_sharpe"}.get(pick)
+    anchor_key = {"Recommended for your profile": "profile", "Minimum variance": "gmv", "Maximum Sharpe": "max_sharpe"}.get(pick)
     if anchor_key:
         sel = opt.get(anchor_key) or opt["gmv"]
     else:
@@ -679,14 +679,23 @@ def optimization(s: dict) -> None:
                                value=start, format_func=lambda i: f"{frontier[i]['vol'] * 100:.1f}%", key=f"pf_opt_risk_{len(frontier)}")
         sel = frontier[idx]
 
+    is_rec = anchor_key == "profile"
+    if is_rec:
+        st.html('<div class="mb-recnote rec"><b>' + T("This is the recommended portfolio.") + "</b> " + T(
+            "Of all the efficient mixes, it is the one with the highest expected return whose risk stays within your {name} profile. "
+            "“Your portfolio today” is what you hold now.", name=T(prof["name"])) + "</div>")
+    else:
+        st.html('<div class="mb-recnote"><b>' + T("Alternative, for comparison only.") + "</b> " + T(
+            "This is not the recommendation: the recommended portfolio is “Recommended for your profile”. "
+            "“Your portfolio today” is what you hold now.") + "</div>")
     sel_w = sel.get("weights", {})
     bt_now = backtest_stats(opt, s["weights"], s["total"])
     bt_sel = backtest_stats(opt, sel_w, s["total"])
-    sel_label = {"profile": T("Your profile"), "gmv": T("Minimum variance"), "max_sharpe": T("Maximum Sharpe")}.get(anchor_key or "", T("Selected"))
-    labels = {"current": T("You are here"), "selected": sel_label, "zone": T("Your profile's comfort zone"),
+    sel_label = {"profile": T("Recommended"), "gmv": T("Minimum variance"), "max_sharpe": T("Maximum Sharpe")}.get(anchor_key or "", T("Your risk level"))
+    labels = {"current": T("Your portfolio today"), "selected": sel_label, "zone": T("Your profile's comfort zone"),
               "x": T("Risk: expected swings per year (volatility)"), "y": T("Expected return per year (CAPM)")}
     anchors = {"gmv": (T("Minimum variance"), opt["gmv"]), "max_sharpe": (T("Maximum Sharpe"), opt["max_sharpe"]),
-               "profile": (T("Your profile"), opt.get("profile"))}
+               "profile": (T("Recommended"), opt.get("profile"))}
     left, right = st.columns([1.6, 1], gap="medium")
     with left:
         with st.container(key="panel_frontier"):
@@ -697,12 +706,12 @@ def optimization(s: dict) -> None:
                             config=charts.CONFIG, key=f"pf_frontier_{lang()}_{pick}")
             st.toggle(T("Show each asset on its own"), key="pf_opt_assets")
     with right:
-        st.html(compare_card(cur, sel, bt_now, bt_sel, prof, T(pick)))
+        st.html(compare_card(cur, sel, bt_now, bt_sel, prof, T(pick), is_rec))
 
     names = list(dict.fromkeys([t for t in s["tickers"]] + sorted(sel_w, key=lambda k: -sel_w[k]) + [pf.CASH]))
     colors = charts.asset_colors(names)
     st.html(f'<div class="mb-sec">{T("How the mix changes")} {src("calc")}</div>')
-    st.plotly_chart(charts.allocation_bars([(T("Today"), s["weights"]), (T("Selected"), sel_w)], colors,
+    st.plotly_chart(charts.allocation_bars([(T("Your portfolio today"), s["weights"]), (T("Recommended") if is_rec else T("Alternative"), sel_w)], colors,
                                            label_of=lambda k: T("Cash") if k == pf.CASH else k),
                     config=charts.CONFIG, key=f"pf_alloc_cmp_{lang()}_{pick}")
     st.html(moves_html(s, sel_w))
@@ -710,7 +719,7 @@ def optimization(s: dict) -> None:
 
     with st.expander(T("Technical details: all portfolios, weights and method")):
         cols = [("current", T("Your portfolio")), ("gmv", T("Minimum variance")), ("max_sharpe", T("Maximum Sharpe")),
-                ("profile", T("Best for your profile ({p})", p=T(prof["name"])))]
+                ("profile", T("Recommended for your profile ({p})", p=T(prof["name"])))]
         wmap = {"current": s["weights"], **{k: (opt.get(k) or {}).get("weights", {}) for k in ("gmv", "max_sharpe", "profile")}}
         tick = list(dict.fromkeys(s["tickers"] + [t for k in ("gmv", "max_sharpe", "profile") for t in wmap[k]]))
         body = ""
@@ -734,7 +743,7 @@ def optimization(s: dict) -> None:
             st.caption(T("Left out for lack of price history: {t}.", t=", ".join(opt["missing"])))
 
 
-def compare_card(cur: dict, sel: dict, bt_now: dict, bt_sel: dict, prof: dict, sel_name: str) -> str:
+def compare_card(cur: dict, sel: dict, bt_now: dict, bt_sel: dict, prof: dict, sel_name: str, is_rec: bool = False) -> str:
     """Today vs the selected portfolio, with the change coloured by whether it is better for the investor."""
     def row(label, a, b, fmt, better_low=False, hint="", dfmt=None):
         if a is None or b is None:
@@ -761,9 +770,11 @@ def compare_card(cur: dict, sel: dict, bt_now: dict, bt_sel: dict, prof: dict, s
         row(T("Worst fall, last 2 years"), dd_now, dd_sel, p1, better_low=True, hint=T("with today's mix"), dfmt=pp),
         row(T("Bad-day loss"), bt_now.get("var95_1d"), bt_sel.get("var95_1d"), p1, better_low=True, hint=T("1 day in 20"), dfmt=pp),
     ])
-    return (f'<div class="mb-cmp"><div class="hd"><div><div class="mb-kicker">{T("Today vs selected")}</div>'
+    kicker = T("Your portfolio vs the recommended one") if is_rec else T("Your portfolio vs an alternative")
+    col = T("Recommended") if is_rec else T("Alternative")
+    return (f'<div class="mb-cmp"><div class="hd"><div><div class="mb-kicker">{kicker}</div>'
             f'<b>{esc(sel_name)}</b></div>{fit}</div>'
-            f'<div class="r th"><div></div><div>{T("Today")}</div><div>{T("Selected")}</div><div>{T("Change")}</div></div>{rows}'
+            f'<div class="r th"><div></div><div>{T("Yours today")}</div><div>{col}</div><div>{T("Change")}</div></div>{rows}'
             f'<p class="mb-foot" style="margin-top:.6rem">{T("Green = better for you (more return, or less risk). pp = percentage points. Estimates, not promises.")}</p></div>')
 
 
@@ -812,7 +823,7 @@ def why_profile(opt: dict, prof: dict, cur: dict) -> str:
     if p and not p.get("feasible", True):
         parts.append(T("Even the minimum-variance mix of these assets is riskier than your profile's {tv} volatility guide, so the suggestion is the minimum-variance portfolio. To get closer, hold more cash or bonds.", tv=tv))
     elif p:
-        parts.append(T("The suggested portfolio is the one with the highest expected return whose volatility stays within the {tv} that fits a {name} profile: it uses your full risk budget and no more.", tv=tv, name=T(prof["name"])))
+        parts.append(T("The recommended portfolio is the one with the highest expected return whose volatility stays within the {tv} that fits a {name} profile: it uses your full risk budget and no more.", tv=tv, name=T(prof["name"])))
     if ms.get("vol") and ms["vol"] > prof["target_vol"] * 1.05:
         parts.append(T("Maximum Sharpe has the best return per unit of risk on paper, but its {v} volatility is above your guide, so it is not the default here.", v=pct(ms["vol"], 1, False)))
     elif ms.get("vol"):

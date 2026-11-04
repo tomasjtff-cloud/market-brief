@@ -488,7 +488,7 @@ ES.update({
     "No investor profile saved yet, so a Moderate profile is assumed. Fill in the Investor profile section.":
         "Todavía no guardaste un perfil, así que se asume uno Moderado. Completá la sección Perfil de inversionista.",
     "Your portfolio": "Tu portafolio", "Minimum variance": "Mínima varianza", "Maximum Sharpe": "Máximo Sharpe",
-    "Best for your profile ({p})": "El mejor para tu perfil ({p})",
+    "Recommended for your profile ({p})": "Recomendado para tu perfil ({p})",
     "Expected returns come from CAPM (10-year Treasury + beta × 5% equity premium) rather than past returns, which are too noisy to optimise on. Risk uses two years of daily returns with Ledoit-Wolf shrinkage. Long-only; one company is capped at your profile's limit, funds at 60%, gold at 15%. Your portfolio's point includes its cash.":
         "Los rendimientos esperados salen del CAPM (bono a 10 años + beta × prima de 5%) y no de rendimientos pasados, que son demasiado ruidosos para optimizar. El riesgo usa dos años de rendimientos diarios con contracción de Ledoit-Wolf. Solo posiciones largas; una empresa con tope en el límite de tu perfil, fondos 60%, oro 15%. El punto de tu portafolio incluye su efectivo.",
     "Expected return": "Rendimiento esperado", "Expected volatility": "Volatilidad esperada", "Expected Sharpe": "Sharpe esperado",
@@ -496,7 +496,7 @@ ES.update({
     "Which one fits you": "Cuál te conviene",
     "Even the minimum-variance mix of these assets is riskier than your profile's {tv} volatility guide, so the suggestion is the minimum-variance portfolio. To get closer, hold more cash or bonds.":
         "Incluso la mezcla de mínima varianza de estos activos es más riesgosa que la guía de volatilidad de {tv} de tu perfil, así que se sugiere el portafolio de mínima varianza. Para acercarte, mantené más efectivo o bonos.",
-    "The suggested portfolio is the one with the highest expected return whose volatility stays within the {tv} that fits a {name} profile: it uses your full risk budget and no more.":
+    "The recommended portfolio is the one with the highest expected return whose volatility stays within the {tv} that fits a {name} profile: it uses your full risk budget and no more.":
         "El portafolio sugerido es el de mayor rendimiento esperado cuya volatilidad se mantiene dentro del {tv} que corresponde a un perfil {name}: usa todo tu presupuesto de riesgo y nada más.",
     "Maximum Sharpe has the best return per unit of risk on paper, but its {v} volatility is above your guide, so it is not the default here.":
         "El de máximo Sharpe tiene el mejor rendimiento por unidad de riesgo en teoría, pero su volatilidad de {v} supera tu guía, así que acá no es la opción por defecto.",
@@ -587,7 +587,7 @@ ES.update({
     "How to read it.": "Cómo leerlo.",
     "Every point on the blue curve is the best mix of these assets for a given amount of risk: further right means bigger swings and a higher expected return. Points below the curve, like most real portfolios, take risk without being paid for it. Pick a portfolio and compare it with yours.":
         "Cada punto de la curva azul es la mejor mezcla de estos activos para un nivel de riesgo: más a la derecha, más oscilación y más rendimiento esperado. Los puntos por debajo de la curva, como la mayoría de los portafolios reales, asumen riesgo sin que se les pague por él. Elegí un portafolio y comparalo con el tuyo.",
-    "Portfolio to compare": "Portafolio a comparar", "Best for your profile": "El mejor para tu perfil", "Choose my own risk level": "Elegir mi nivel de riesgo",
+    "Portfolio to compare": "Portafolio a comparar", "Recommended for your profile": "Recomendado para tu perfil", "Choose my own risk level": "Elegir mi nivel de riesgo",
     "Risk level: expected swings per year (volatility)": "Nivel de riesgo: oscilación esperada por año (volatilidad)",
     "You are here": "Estás acá", "Selected": "Seleccionado", "Your profile's comfort zone": "Zona cómoda para tu perfil",
     "Risk: expected swings per year (volatility)": "Riesgo: oscilación esperada por año (volatilidad)",
@@ -614,4 +614,17 @@ ES.update({
     "It stays within the {tv} your {name} profile is comfortable with.": "Se mantiene dentro del {tv} con el que tu perfil {name} está cómodo.",
     "It is riskier than the {tv} your {name} profile is comfortable with, so expect bigger falls than you said you could take.":
         "Es más riesgosa que el {tv} con el que tu perfil {name} está cómodo, así que esperá caídas mayores de las que dijiste poder asumir.",
+})
+
+ES.update({
+    "This is the recommended portfolio.": "Este es el portafolio recomendado.",
+    "Of all the efficient mixes, it is the one with the highest expected return whose risk stays within your {name} profile. “Your portfolio today” is what you hold now.":
+        "De todas las mezclas eficientes, es la de mayor rendimiento esperado cuyo riesgo se mantiene dentro de tu perfil {name}. “Tu portafolio hoy” es lo que tenés ahora.",
+    "Alternative, for comparison only.": "Alternativa, solo para comparar.",
+    "This is not the recommendation: the recommended portfolio is “Recommended for your profile”. “Your portfolio today” is what you hold now.":
+        "Esta no es la recomendación: el portafolio recomendado es “Recomendado para tu perfil”. “Tu portafolio hoy” es lo que tenés ahora.",
+    "Recommended": "Recomendado", "Your risk level": "Tu nivel de riesgo", "Your portfolio today": "Tu portafolio hoy",
+    "Alternative": "Alternativa", "Yours today": "El tuyo hoy",
+    "Your portfolio vs the recommended one": "Tu portafolio vs el recomendado",
+    "Your portfolio vs an alternative": "Tu portafolio vs una alternativa",
 })
