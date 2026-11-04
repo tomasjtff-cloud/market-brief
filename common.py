@@ -8,7 +8,7 @@ import streamlit as st
 
 import data
 from i18n import LANGS, D, T, choice
-from ui import esc, link, sgn
+from ui import esc, link, logo_uri, sgn
 
 DEFAULT_WATCHLIST = ["AAPL", "NVDA", "MSFT", "GOOGL", "TSLA"]
 MAX_WATCHLIST = 8
@@ -127,7 +127,7 @@ def current_page() -> str:
 def top_bar() -> None:
     with st.container(key="topbar"):
         c1, c2, c4, c3 = st.columns([1.15, 5.5, 0.8, 1.55], vertical_alignment="center")
-        c1.html('<div class="mb-logo"><span class="mark">MB</span><span>Market Brief'
+        c1.html(f'<div class="mb-logo"><img class="mark" src="{logo_uri()}" alt=""><span>Market<span class="b"> Brief</span>'
                 f'<small>{T("Free markets terminal")}</small></span></div>')
         with c2:
             choice(st.segmented_control, "Navigate", list(PAGES), key="page", default="Markets", label_visibility="collapsed")

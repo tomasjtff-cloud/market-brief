@@ -35,6 +35,13 @@ PALETTES = {
 }
 
 
+def logo_uri() -> str:
+    """The Market Brief mark (a page with a folded corner and a rising line) as an inline image."""
+    from pathlib import Path
+    svg = (Path(__file__).parent / "assets" / "logo.svg").read_bytes()
+    return "data:image/svg+xml;base64," + base64.b64encode(svg).decode()
+
+
 def mode() -> str:
     try:
         return "dark" if st.context.theme.type == "dark" else "light"
@@ -81,12 +88,12 @@ h1, h2, h3, h4 {{ font-family: 'Inter', system-ui, sans-serif !important; letter
 /* Streamlit Cloud draws its own toolbar (Share / Fork / GitHub / menu) in the top-right corner:
    keep that corner free so it never sits on top of the search box. */
 @media (min-width: 641px) {{ .st-key-topbar {{ padding-right: calc(1.4rem + 200px) !important; }} }}
-@media (max-width: 1500px) {{ .mb-logo small {{ display: none !important; }} .mb-logo {{ font-size: 1rem !important; }} }}
+@media (max-width: 1750px) {{ .mb-logo small {{ display: none !important; }} .mb-logo {{ font-size: 1rem !important; }} }}
 @media (max-width: 640px) {{ .st-key-topbar {{ padding-top: 2.6rem !important; }} }}
 .mb-logo {{ display: flex; align-items: center; gap: 0.55rem; color: #FFF; font-weight: 700; font-size: 1.12rem;
   letter-spacing: -0.02em; white-space: nowrap; }}
-.mb-logo .mark {{ width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg,#3B7BFF,#16C784);
-  display: inline-flex; align-items: center; justify-content: center; color: #FFF; font-size: 0.8rem; font-weight: 800; }}
+.mb-logo .mark {{ width: 28px; height: 28px; flex: none; display: block; }}
+.mb-logo .b {{ font-weight: 400; color: #9DB7FF; }}
 .mb-logo small {{ display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem; color: #8FA3C2; font-weight: 500; font-size: 0.7rem; letter-spacing: 0; }}
 .st-key-topbar [data-testid="stButtonGroup"] button {{ background: transparent; border: none; color: #C9D6EA;
   font-weight: 500; padding: 0.3rem 0.45rem; min-height: 2.1rem; font-size: 0.88rem; }}
