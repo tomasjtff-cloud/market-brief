@@ -442,3 +442,100 @@ def frontier(opt: dict, points: dict[str, dict], target_vol: float | None, heigh
     fig.update_xaxes(title=dict(text=T("Expected risk (annual volatility)"), font=dict(size=11)), ticksuffix="%", showspikes=False, rangemode="tozero")
     fig.update_yaxes(title=dict(text=T("Expected return (CAPM, annual)"), font=dict(size=11)), ticksuffix="%", showspikes=False)
     return fig
+
+
+def asset_colors(names: list[str]) -> dict[str, str]:
+    """Stable colour per asset across charts; cash is always grey."""
+    palette = [x for x in PIE_COLORS if x != "#8C9AAE"]
+    out, i = {}, 0
+    for n in names:
+        if n == "CASH":
+            out[n] = "#8C9AAE"
+        else:
+            out[n] = palette[i % len(palette)]
+            i += 1
+    return out
+
+
+def frontier_v2(frontier: list[dict], current: dict, selected: dict, anchors: dict[str, tuple[str, dict]],
+                target_vol: float | None, assets: dict | None = None, labels: dict | None = None, height: int = 470,
+                selected_key: str | None = None) -> go.Figure:
+    """Efficient frontier built for reading: comfort zone shaded, points labelled on the chart, an arrow from
+    today's portfolio to the one selected, and plain-language axes."""
+    p = P()
+    labels = labels or {}
+    fig = go.Figure()
+    xs = [r["vol"] * 100 for r in frontier] + [current.get("vol", 0) * 100, selected.get("vol", 0) * 100]
+    ys = [r["ret"] * 100 for r in frontier] + [current.get("ret", 0) * 100, selected.get("ret", 0) * 100]
+    if assets:
+        xs += [a["vol"] * 100 for a in assets.values()]
+        ys += [a["ret"] * 100 for a in assets.values()]
+    x_max = max(xs) * 1.15 + 1
+    y_lo, y_hi = min(ys), max(ys)
+    pad = (y_hi - y_lo) * 0.18 or 1
+    if target_vol:
+        fig.add_vrect(x0=0, x1=target_vol * 100, fillcolor=_rgba(p["up"], 0.07), line_width=0, layer="below")
+        fig.add_vline(x=target_vol * 100, line=dict(color=_rgba(p["up"], 0.55), width=1, dash="dot"))
+        fig.add_annotation(x=target_vol * 100, y=y_hi + pad * 0.85, text=labels.get("zone", ""), showarrow=False,
+                           xanchor="right", font=dict(size=11, color=p["up"]), xshift=-6)
+    if assets:
+        fig.add_trace(go.Scatter(x=[a["vol"] * 100 for a in assets.values()], y=[a["ret"] * 100 for a in assets.values()],
+                                 mode="markers+text", text=list(assets), textposition="top center",
+                                 textfont=dict(size=10, color=p["faint"]), marker=dict(size=6, color=p["faint"], opacity=0.7),
+                                 hovertemplate="%{text}<br>" + T("Risk") + " %{x:.1f}% · " + T("Return") + " %{y:.1f}%<extra></extra>"))
+    custom = [[", ".join(f"{k} {v:.0%}" for k, v in sorted(r["weights"].items(), key=lambda kv: -kv[1])[:4])] for r in frontier]
+    fig.add_trace(go.Scatter(x=[r["vol"] * 100 for r in frontier], y=[r["ret"] * 100 for r in frontier], mode="lines",
+                             line=dict(color=p["accent"], width=3.2, shape="spline", smoothing=0.6), customdata=custom,
+                             hovertemplate=T("Risk") + " %{x:.1f}% · " + T("Return") + " %{y:.1f}%<br>%{customdata[0]}<extra></extra>"))
+    style = {"gmv": (p["teal"], "bottom right"), "max_sharpe": (p["orange"], "top left"), "profile": (p["up"], "bottom right")}
+    for key, (label, r) in anchors.items():
+        if not r or r.get("vol") is None or key == selected_key:
+            continue  # the selected portfolio carries its own label
+        col, pos = style.get(key, (p["muted"], "top right"))
+        fig.add_trace(go.Scatter(x=[r["vol"] * 100], y=[r["ret"] * 100], mode="markers+text", text=[f"  {label}  "],
+                                 textposition=pos, textfont=dict(size=11, color=col),
+                                 marker=dict(size=11, color=p["chart_bg"], line=dict(color=col, width=2.5)),
+                                 hovertemplate=label + ": " + T("risk") + " %{x:.1f}%, " + T("return") + " %{y:.1f}%<extra></extra>"))
+    cx, cy, sx, sy = current["vol"] * 100, current["ret"] * 100, selected["vol"] * 100, selected["ret"] * 100
+    if abs(cx - sx) + abs(cy - sy) > 0.3:
+        fig.add_annotation(x=sx, y=sy, ax=cx, ay=cy, xref="x", yref="y", axref="x", ayref="y", showarrow=True, arrowhead=3,
+                           arrowsize=1.2, arrowwidth=1.6, arrowcolor=p["muted"], standoff=11, startstandoff=9, text="")
+    fig.add_trace(go.Scatter(x=[cx], y=[cy], mode="markers+text", text=[f"  {labels.get('current', '')}  "], textposition="bottom center",
+                             textfont=dict(size=12, color=p["ink"]),
+                             marker=dict(size=14, symbol="diamond", color=p["ink"], line=dict(color=p["chart_bg"], width=2)),
+                             hovertemplate=labels.get("current", "") + ": " + T("risk") + " %{x:.1f}%, " + T("return") + " %{y:.1f}%<extra></extra>"))
+    fig.add_trace(go.Scatter(x=[sx], y=[sy], mode="markers", marker=dict(size=30, color=_rgba(p["accent"], 0.18)), hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=[sx], y=[sy], mode="markers+text", text=[f"<b>{labels.get('selected', '')}</b>"], textposition="top center",
+                             textfont=dict(size=12, color=p["accent"]),
+                             marker=dict(size=15, color=p["accent"], line=dict(color=p["chart_bg"], width=2.5)),
+                             hovertemplate=labels.get("selected", "") + ": " + T("risk") + " %{x:.1f}%, " + T("return") + " %{y:.1f}%<extra></extra>"))
+    base(fig, height, right_axis=False, legend=False)
+    fig.update_layout(hovermode="closest", margin=dict(l=8, r=12, t=14, b=8))
+    fig.update_xaxes(title=dict(text=labels.get("x", ""), font=dict(size=12, color=p["muted"])), ticksuffix="%", showspikes=False,
+                     range=[0, x_max], showgrid=True, gridcolor=p["grid"], zeroline=False)
+    fig.update_yaxes(title=dict(text=labels.get("y", ""), font=dict(size=12, color=p["muted"])), ticksuffix="%", showspikes=False,
+                     range=[y_lo - pad, y_hi + pad * 1.4])
+    return fig
+
+
+def allocation_bars(rows: list[tuple[str, dict[str, float]]], colors: dict[str, str], label_of=lambda k: k,
+                    height: int = 190) -> go.Figure:
+    """100% stacked horizontal bars, one per portfolio, so two mixes can be compared at a glance."""
+    p = P()
+    order = list(colors)
+    fig = go.Figure()
+    for k in order:
+        vals = [w.get(k, 0.0) * 100 for _, w in rows]
+        if max(vals) < 0.05:
+            continue
+        fig.add_trace(go.Bar(y=[name for name, _ in rows], x=vals, orientation="h", name=label_of(k),
+                             marker=dict(color=colors[k], line=dict(color=p["chart_bg"], width=1.5)),
+                             text=[f"{label_of(k)} {v:.0f}%" if v >= 7 else "" for v in vals], textposition="inside",
+                             insidetextanchor="middle", textfont=dict(size=11, color="#FFFFFF"),
+                             hovertemplate="%{y}: " + label_of(k) + " %{x:.1f}%<extra></extra>"))
+    base(fig, height, right_axis=False)
+    fig.update_layout(barmode="stack", bargap=0.38, hovermode="closest", margin=dict(l=8, r=8, t=8, b=8),
+                      legend=dict(orientation="h", y=-0.18, x=0, yanchor="top"))
+    fig.update_xaxes(range=[0, 100], ticksuffix="%", showgrid=False, showspikes=False, showticklabels=False)
+    fig.update_yaxes(showgrid=False, showspikes=False, autorange="reversed", tickfont=dict(size=12, color=p["ink"]))
+    return fig

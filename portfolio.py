@@ -449,12 +449,19 @@ def optimise(mu: pd.Series, cov: pd.DataFrame, rf: float, caps: dict[str, float]
         return -(w @ m - rf) / v
     ms, _ = solve(neg_sharpe)
 
+    as_dict = lambda w: {k: float(x) for k, x in zip(names, w) if x > 0.0005}  # noqa: E731
     lo, hi = float(gmv @ m), float(max(m[ub > 0]))
-    frontier = []
-    for target in np.linspace(lo, hi, frontier_points):
+    frontier = [{**_stats(gmv, m, c, rf), "weights": as_dict(gmv)}]
+    for target in np.linspace(lo, hi, frontier_points)[1:]:
         w, ok = solve(lambda w: w @ c @ w, ({"type": "ineq", "fun": lambda w, t=target: w @ m - t},))
         if ok:
-            frontier.append(_stats(w, m, c, rf))
+            frontier.append({**_stats(w, m, c, rf), "weights": as_dict(w)})
+    frontier.sort(key=lambda r: r["vol"])
+    clean = []
+    for r in frontier:  # keep only points that add return as risk rises (the efficient part), drop near-duplicates
+        if not clean or (r["ret"] > clean[-1]["ret"] + 1e-5 and r["vol"] > clean[-1]["vol"] + 1e-5):
+            clean.append(r)
+    frontier = clean
     prof = None
     if target_vol is not None:
         if _stats(gmv, m, c, rf)["vol"] > target_vol:
@@ -463,7 +470,6 @@ def optimise(mu: pd.Series, cov: pd.DataFrame, rf: float, caps: dict[str, float]
             prof, feasible = solve(lambda w: -(w @ m),
                                    ({"type": "ineq", "fun": lambda w: target_vol ** 2 - w @ c @ w},))
             feasible = True
-    as_dict = lambda w: {k: float(x) for k, x in zip(names, w) if x > 0.0005}  # noqa: E731
     out = {"gmv": {"weights": as_dict(gmv), **_stats(gmv, m, c, rf)},
            "max_sharpe": {"weights": as_dict(ms), **_stats(ms, m, c, rf)},
            "frontier": frontier,

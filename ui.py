@@ -244,6 +244,39 @@ a.mb-card:hover {{ border-color: var(--faint); transform: translateY(-1px); }}
 .mb-tone span {{ color: var(--muted); font-size: 0.72rem; }}
 .mb-tone.up {{ border-left-color: var(--up); }} .mb-tone.down {{ border-left-color: var(--down); }} .mb-tone.hold {{ border-left-color: var(--ai); }}
 
+/* ---------- efficient frontier ---------- */
+.mb-explain {{ background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0.75rem 1rem;
+  color: var(--body); font-size: 0.88rem; line-height: 1.55; margin-bottom: 0.7rem; }}
+.mb-explain b {{ color: var(--ink); }}
+.st-key-panel_frontier {{ background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0.7rem 0.8rem 0.5rem; gap: 0.2rem; }}
+.mb-cmp {{ background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem 0.8rem; }}
+.mb-cmp .hd {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 0.6rem; margin-bottom: 0.7rem; }}
+.mb-cmp .hd b {{ color: var(--ink); font-size: 1.05rem; font-weight: 650; }}
+.mb-cmp .hd .mb-lean {{ font-size: 0.74rem; padding: 0.2rem 0.55rem; white-space: nowrap; }}
+.mb-cmp .r {{ display: grid; grid-template-columns: 1.6fr 0.8fr 0.8fr 0.95fr; gap: 0.4rem; align-items: center; padding: 0.55rem 0;
+  border-top: 1px solid var(--soft); }}
+.mb-cmp .r.th {{ border-top: none; padding: 0 0 0.2rem; color: var(--faint); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; }}
+.mb-cmp .r.th div:not(:first-child) {{ text-align: right; }}
+.mb-cmp .lb {{ color: var(--ink); font-size: 0.86rem; font-weight: 550; line-height: 1.25; }}
+.mb-cmp .lb span {{ display: block; color: var(--faint); font-size: 0.7rem; font-weight: 400; }}
+.mb-cmp .v {{ text-align: right; font-family: var(--mono); font-size: 0.92rem; color: var(--muted); }}
+.mb-cmp .v.sel {{ color: var(--ink); font-weight: 650; }}
+.mb-cmp .r > div:last-child {{ text-align: right; }}
+.mb-delta {{ font-family: var(--mono); font-size: 0.74rem; font-weight: 600; padding: 0.12rem 0.4rem; border-radius: 6px; white-space: nowrap; }}
+.mb-delta.up {{ color: var(--up); background: var(--up-bg); }} .mb-delta.down {{ color: var(--down); background: var(--down-bg); }}
+.mb-delta.flat {{ color: var(--muted); background: var(--flat-bg); }}
+.mb-moves {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.5rem; }}
+.mb-move {{ display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: auto auto; column-gap: 0.5rem; align-items: baseline;
+  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--faint); border-radius: 10px; padding: 0.5rem 0.7rem; }}
+.mb-move.up {{ border-left-color: var(--up); }} .mb-move.down {{ border-left-color: var(--down); }}
+.mb-move .vb {{ grid-row: 1; color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }}
+.mb-move b {{ grid-row: 1; color: var(--ink); font-size: 0.92rem; }}
+.mb-move .num {{ grid-row: 1; font-family: var(--mono); font-size: 0.85rem; font-weight: 600; text-align: right; }}
+.mb-move.up .num {{ color: var(--up); }} .mb-move.down .num {{ color: var(--down); }}
+.mb-move .amt {{ grid-column: 1 / -1; grid-row: 2; text-align: left; color: var(--muted) !important; font-weight: 400; font-size: 0.74rem; }}
+@media (max-width: 640px) {{ .mb-cmp .r {{ grid-template-columns: 1.3fr 0.8fr 0.8fr 0.9fr; }} }}
+
 /* ---------- research ---------- */
 .st-key-panel_rs_body h2, .st-key-panel_rs_preview h2 {{ font-size: 1.08rem !important; font-weight: 700; margin: 1rem 0 0.3rem !important; padding: 0 !important; }}
 .st-key-panel_rs_body h3, .st-key-panel_rs_preview h3 {{ font-size: 0.98rem !important; }}

@@ -581,3 +581,37 @@ ES.update({
     "On GitHub: drag the file, then “Commit changes”. The app redeploys in about a minute and the pitch appears under Published pitches.":
         "En GitHub: arrastrá el archivo y después “Commit changes”. La app se actualiza en cerca de un minuto y la tesis aparece en Tesis publicadas.",
 })
+
+# ---------------------------------------------------------------- efficient frontier redesign
+ES.update({
+    "How to read it.": "Cómo leerlo.",
+    "Every point on the blue curve is the best mix of these assets for a given amount of risk: further right means bigger swings and a higher expected return. Points below the curve, like most real portfolios, take risk without being paid for it. Pick a portfolio and compare it with yours.":
+        "Cada punto de la curva azul es la mejor mezcla de estos activos para un nivel de riesgo: más a la derecha, más oscilación y más rendimiento esperado. Los puntos por debajo de la curva, como la mayoría de los portafolios reales, asumen riesgo sin que se les pague por él. Elegí un portafolio y comparalo con el tuyo.",
+    "Portfolio to compare": "Portafolio a comparar", "Best for your profile": "El mejor para tu perfil", "Choose my own risk level": "Elegir mi nivel de riesgo",
+    "Risk level: expected swings per year (volatility)": "Nivel de riesgo: oscilación esperada por año (volatilidad)",
+    "You are here": "Estás acá", "Selected": "Seleccionado", "Your profile's comfort zone": "Zona cómoda para tu perfil",
+    "Risk: expected swings per year (volatility)": "Riesgo: oscilación esperada por año (volatilidad)",
+    "Expected return per year (CAPM)": "Rendimiento esperado por año (CAPM)", "Show each asset on its own": "Mostrar cada activo por separado",
+    "How the mix changes": "Cómo cambia la mezcla", "Today": "Hoy", "Why this one": "Por qué este",
+    "Technical details: all portfolios, weights and method": "Detalles técnicos: todos los portafolios, pesos y método",
+    "Within your profile": "Dentro de tu perfil", "Riskier than your profile": "Más riesgoso que tu perfil",
+    "per year, CAPM": "por año, CAPM", "Risk (volatility)": "Riesgo (volatilidad)", "typical yearly swing": "oscilación anual típica",
+    "Return per unit of risk": "Rendimiento por unidad de riesgo", "Worst fall, last 2 years": "Peor caída, últimos 2 años",
+    "with today's prices": "con los precios de hoy", "Bad-day loss": "Pérdida en un mal día", "1 day in 20": "1 día de cada 20",
+    "Today vs selected": "Hoy vs seleccionado", "Change": "Cambio",
+    "Green = better for you (more return, or less risk). pp = percentage points. Estimates, not promises.": "Verde = mejor para vos (más rendimiento o menos riesgo). pp = puntos porcentuales. Son estimaciones, no promesas.",
+    "with today's mix": "con la mezcla de hoy",
+    "Invest": "Invertir", "Keep in cash": "Dejar en efectivo", "Your portfolio is already this mix.": "Tu portafolio ya tiene esta mezcla.",
+    "Moves to get there": "Movimientos para llegar",
+    "Share of today's total value and its dollar amount. A guide for direction: nothing is traded, and taxes and fees are not included.":
+        "Porcentaje del valor total de hoy y su monto en dólares. Es una guía de dirección: no se opera nada y no incluye impuestos ni comisiones.",
+    "Minimum variance is the calmest mix these assets allow ({v} expected swings, {r} expected return). It ignores return estimates, so it is the most robust to forecasting errors, but it usually earns the least.":
+        "La mínima varianza es la mezcla más tranquila que permiten estos activos ({v} de oscilación esperada, {r} de rendimiento esperado). No usa estimaciones de rendimiento, así que es la más robusta a errores de pronóstico, pero suele rendir menos.",
+    "Maximum Sharpe is the mix with the most expected return per unit of risk ({v} swings, {r} return). On paper it is the most efficient, but it leans heavily on return estimates, which are uncertain.":
+        "El máximo Sharpe es la mezcla con más rendimiento esperado por unidad de riesgo ({v} de oscilación, {r} de rendimiento). En teoría es la más eficiente, pero depende mucho de las estimaciones de rendimiento, que son inciertas.",
+    "This is the best mix of these assets for {v} of expected swings: it maximises expected return ({r}) at that risk.":
+        "Es la mejor mezcla de estos activos para {v} de oscilación esperada: maximiza el rendimiento esperado ({r}) a ese riesgo.",
+    "It stays within the {tv} your {name} profile is comfortable with.": "Se mantiene dentro del {tv} con el que tu perfil {name} está cómodo.",
+    "It is riskier than the {tv} your {name} profile is comfortable with, so expect bigger falls than you said you could take.":
+        "Es más riesgosa que el {tv} con el que tu perfil {name} está cómodo, así que esperá caídas mayores de las que dijiste poder asumir.",
+})

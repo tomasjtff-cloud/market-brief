@@ -640,46 +640,161 @@ def backtest_stats(opt: dict, weights: dict[str, float], value: float) -> dict:
     return r or {}
 
 
+PICKS = ["Best for your profile", "Minimum variance", "Maximum Sharpe", "Choose my own risk level"]
+
+
 def optimization(s: dict) -> None:
     include = st.toggle(T("Also consider diversifiers I don't own (S&P 500, bonds, gold, international and emerging markets ETFs)"),
                         value=True, key="pf_opt_div")
     opt, prof = optimise_for(s, include)
-    if not opt:
+    if not opt or not opt.get("frontier"):
         st.info(T("The optimiser needs price history for at least two assets. Add positions or turn on the diversifiers."))
         return
     if not s["profile"]:
         st.caption(T("No investor profile saved yet, so a Moderate profile is assumed. Fill in the Investor profile section."))
     cur = current_point(s, opt)
-    labels = {"current": T("Your portfolio"), "gmv": T("Minimum variance"), "max_sharpe": T("Maximum Sharpe"),
-              "profile": T("Best for your profile ({p})", p=T(prof["name"]))}
-    pts = {"current": (labels["current"], cur), "gmv": (labels["gmv"], opt["gmv"]), "max_sharpe": (labels["max_sharpe"], opt["max_sharpe"]),
-           "profile": (labels["profile"], opt.get("profile"))}
-    st.plotly_chart(charts.frontier(opt, pts, prof["target_vol"]), config=charts.CONFIG, key=f"pf_frontier_{lang()}")
-    st.html('<p class="mb-foot">' + T("Expected returns come from CAPM (10-year Treasury + beta × 5% equity premium) rather than past returns, which are too noisy to optimise on. Risk uses two years of daily returns with Ledoit-Wolf shrinkage. Long-only; one company is capped at your profile's limit, funds at 60%, gold at 15%. Your portfolio's point includes its cash.") + "</p>")
-    if opt.get("missing"):
-        st.caption(T("Left out for lack of price history: {t}.", t=", ".join(opt["missing"])))
+    frontier = opt["frontier"]
+    st.html('<div class="mb-explain"><b>' + T("How to read it.") + "</b> " + T(
+        "Every point on the blue curve is the best mix of these assets for a given amount of risk: further right means bigger "
+        "swings and a higher expected return. Points below the curve, like most real portfolios, take risk without being paid for "
+        "it. Pick a portfolio and compare it with yours.") + "</div>")
 
-    names = list(dict.fromkeys([t for t in s["tickers"]] + [t for k in ("gmv", "max_sharpe", "profile") for t in (opt.get(k) or {}).get("weights", {})]))
-    cols = [("current", labels["current"]), ("gmv", labels["gmv"]), ("max_sharpe", labels["max_sharpe"]), ("profile", labels["profile"])]
-    wmap = {"current": s["weights"], **{k: (opt.get(k) or {}).get("weights", {}) for k in ("gmv", "max_sharpe", "profile")}}
-    body = ""
-    for t in names + [pf.CASH]:
-        vals = [wmap[k].get(t, 0.0) for k, _ in cols]
-        if max(vals) < 0.0005:
+    pick = choice(st.segmented_control, T("Portfolio to compare"), PICKS, key="pf_opt_pick", default=PICKS[0],
+                  label_visibility="collapsed") or PICKS[0]
+    anchor_key = {"Best for your profile": "profile", "Minimum variance": "gmv", "Maximum Sharpe": "max_sharpe"}.get(pick)
+    if anchor_key:
+        sel = opt.get(anchor_key) or opt["gmv"]
+    else:
+        prof_vol = (opt.get("profile") or opt["gmv"])["vol"]
+        start = min(range(len(frontier)), key=lambda i: abs(frontier[i]["vol"] - prof_vol))
+        idx = st.select_slider(T("Risk level: expected swings per year (volatility)"), options=list(range(len(frontier))),
+                               value=start, format_func=lambda i: f"{frontier[i]['vol'] * 100:.1f}%", key=f"pf_opt_risk_{len(frontier)}")
+        sel = frontier[idx]
+
+    sel_w = sel["weights"]
+    bt_now = backtest_stats(opt, s["weights"], s["total"])
+    bt_sel = backtest_stats(opt, sel_w, s["total"])
+    sel_label = {"profile": T("Your profile"), "gmv": T("Minimum variance"), "max_sharpe": T("Maximum Sharpe")}.get(anchor_key or "", T("Selected"))
+    labels = {"current": T("You are here"), "selected": sel_label, "zone": T("Your profile's comfort zone"),
+              "x": T("Risk: expected swings per year (volatility)"), "y": T("Expected return per year (CAPM)")}
+    anchors = {"gmv": (T("Minimum variance"), opt["gmv"]), "max_sharpe": (T("Maximum Sharpe"), opt["max_sharpe"]),
+               "profile": (T("Your profile"), opt.get("profile"))}
+    left, right = st.columns([1.6, 1], gap="medium")
+    with left:
+        with st.container(key="panel_frontier"):
+            show_assets = st.session_state.get("pf_opt_assets", False)
+            st.plotly_chart(charts.frontier_v2(frontier, cur, sel, anchors, prof["target_vol"],
+                                               assets=opt["assets"] if show_assets else None, labels=labels,
+                                               selected_key=anchor_key),
+                            config=charts.CONFIG, key=f"pf_frontier_{lang()}_{pick}")
+            st.toggle(T("Show each asset on its own"), key="pf_opt_assets")
+    with right:
+        st.html(compare_card(cur, sel, bt_now, bt_sel, prof, T(pick)))
+
+    names = list(dict.fromkeys([t for t in s["tickers"]] + sorted(sel_w, key=lambda k: -sel_w[k]) + [pf.CASH]))
+    colors = charts.asset_colors(names)
+    st.html(f'<div class="mb-sec">{T("How the mix changes")} {src("calc")}</div>')
+    st.plotly_chart(charts.allocation_bars([(T("Today"), s["weights"]), (T("Selected"), sel_w)], colors,
+                                           label_of=lambda k: T("Cash") if k == pf.CASH else k),
+                    config=charts.CONFIG, key=f"pf_alloc_cmp_{lang()}_{pick}")
+    st.html(moves_html(s, sel_w))
+    st.html(f'<div class="mb-sec">{T("Why this one")}</div><div class="mb-callout">{why_selected(opt, prof, cur, sel, anchor_key)}</div>')
+
+    with st.expander(T("Technical details: all portfolios, weights and method")):
+        cols = [("current", T("Your portfolio")), ("gmv", T("Minimum variance")), ("max_sharpe", T("Maximum Sharpe")),
+                ("profile", T("Best for your profile ({p})", p=T(prof["name"])))]
+        wmap = {"current": s["weights"], **{k: (opt.get(k) or {}).get("weights", {}) for k in ("gmv", "max_sharpe", "profile")}}
+        tick = list(dict.fromkeys(s["tickers"] + [t for k in ("gmv", "max_sharpe", "profile") for t in wmap[k]]))
+        body = ""
+        for t in tick + [pf.CASH]:
+            vals = [wmap[k].get(t, 0.0) for k, _ in cols]
+            if max(vals) < 0.0005:
+                continue
+            body += f'<tr><td class="l">{esc(T("Cash") if t == pf.CASH else t)}</td>' + "".join(f'<td class="num">{pct(v, 1, False)}</td>' for v in vals) + "</tr>"
+        stats = {"current": cur, **{k: opt.get(k) for k in ("gmv", "max_sharpe", "profile")}}
+        bts = {k: backtest_stats(opt, wmap[k], s["total"]) for k, _ in cols}
+        for label, f in ((T("Expected return"), lambda k: pct((stats[k] or {}).get("ret"), 1, False)),
+                         (T("Expected volatility"), lambda k: pct((stats[k] or {}).get("vol"), 1, False)),
+                         (T("Expected Sharpe"), lambda k: num((stats[k] or {}).get("sharpe"))),
+                         (T("Max drawdown, last 2 years"), lambda k: pct(bts[k].get("max_drawdown"))),
+                         (T("VaR 95%, 1 day"), lambda k: pct(bts[k].get("var95_1d"), 1, False))):
+            body += f'<tr><td class="l"><b>{label}</b></td>' + "".join(f'<td class="num">{f(k)}</td>' for k, _ in cols) + "</tr>"
+        head = "".join(f"<th>{esc(lbl)}</th>" for _, lbl in cols)
+        st.html(f'<div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">{T("Asset")}</th>{head}</tr>{body}</table></div>'
+                '<p class="mb-foot">' + T("Expected returns come from CAPM (10-year Treasury + beta × 5% equity premium) rather than past returns, which are too noisy to optimise on. Risk uses two years of daily returns with Ledoit-Wolf shrinkage. Long-only; one company is capped at your profile's limit, funds at 60%, gold at 15%. Your portfolio's point includes its cash.") + "</p>")
+        if opt.get("missing"):
+            st.caption(T("Left out for lack of price history: {t}.", t=", ".join(opt["missing"])))
+
+
+def compare_card(cur: dict, sel: dict, bt_now: dict, bt_sel: dict, prof: dict, sel_name: str) -> str:
+    """Today vs the selected portfolio, with the change coloured by whether it is better for the investor."""
+    def row(label, a, b, fmt, better_low=False, hint="", dfmt=None):
+        if a is None or b is None:
+            d_html = ""
+        else:
+            d = b - a
+            good = (d < 0) if better_low else (d > 0)
+            cls = "flat" if abs(d) < 1e-4 else ("up" if good else "down")
+            arrow = "▲" if d > 0 else "▼" if d < 0 else "•"
+            d_html = f'<span class="mb-delta {cls}">{arrow} {(dfmt or fmt)(abs(d))}</span>'
+        return (f'<div class="r"><div class="lb">{label}<span>{hint}</span></div><div class="v num">{fmt(a) if a is not None else "–"}</div>'
+                f'<div class="v num sel">{fmt(b) if b is not None else "–"}</div><div>{d_html}</div></div>')
+    p1 = lambda x: f"{x * 100:.1f}%"  # noqa: E731
+    pp = lambda x: f"{x * 100:.1f} pp"  # noqa: E731
+    within = sel.get("vol") is not None and sel["vol"] <= prof["target_vol"] * 1.02
+    fit = (f'<span class="mb-lean up">{T("Within your profile")}</span>' if within
+           else f'<span class="mb-lean down">{T("Riskier than your profile")}</span>')
+    dd_now = -bt_now["max_drawdown"] if bt_now.get("max_drawdown") is not None else None
+    dd_sel = -bt_sel["max_drawdown"] if bt_sel.get("max_drawdown") is not None else None
+    rows = "".join([
+        row(T("Expected return"), cur.get("ret"), sel.get("ret"), p1, hint=T("per year, CAPM"), dfmt=pp),
+        row(T("Risk (volatility)"), cur.get("vol"), sel.get("vol"), p1, better_low=True, hint=T("typical yearly swing"), dfmt=pp),
+        row(T("Return per unit of risk"), cur.get("sharpe"), sel.get("sharpe"), lambda x: f"{x:.2f}", hint="Sharpe"),
+        row(T("Worst fall, last 2 years"), dd_now, dd_sel, p1, better_low=True, hint=T("with today's mix"), dfmt=pp),
+        row(T("Bad-day loss"), bt_now.get("var95_1d"), bt_sel.get("var95_1d"), p1, better_low=True, hint=T("1 day in 20"), dfmt=pp),
+    ])
+    return (f'<div class="mb-cmp"><div class="hd"><div><div class="mb-kicker">{T("Today vs selected")}</div>'
+            f'<b>{esc(sel_name)}</b></div>{fit}</div>'
+            f'<div class="r th"><div></div><div>{T("Today")}</div><div>{T("Selected")}</div><div>{T("Change")}</div></div>{rows}'
+            f'<p class="mb-foot" style="margin-top:.6rem">{T("Green = better for you (more return, or less risk). pp = percentage points. Estimates, not promises.")}</p></div>')
+
+
+def moves_html(s: dict, sel_w: dict[str, float]) -> str:
+    total = s["total"]
+    keys = set(sel_w) | set(s["weights"])
+    moves = sorted(((k, sel_w.get(k, 0.0) - s["weights"].get(k, 0.0)) for k in keys), key=lambda kv: -abs(kv[1]))
+    chips = ""
+    for k, d in moves:
+        if abs(d) < 0.005:
             continue
-        body += f'<tr><td class="l">{esc(T("Cash") if t == pf.CASH else t)}</td>' + "".join(f'<td class="num">{pct(v, 1, False)}</td>' for v in vals) + "</tr>"
-    stats = {"current": cur, **{k: opt.get(k) for k in ("gmv", "max_sharpe", "profile")}}
-    bts = {k: backtest_stats(opt, wmap[k], s["total"]) for k, _ in cols}
-    for label, f in ((T("Expected return"), lambda k: pct((stats[k] or {}).get("ret"), 1, False)),
-                     (T("Expected volatility"), lambda k: pct((stats[k] or {}).get("vol"), 1, False)),
-                     (T("Expected Sharpe"), lambda k: num((stats[k] or {}).get("sharpe"))),
-                     (T("Max drawdown, last 2 years"), lambda k: pct(bts[k].get("max_drawdown"))),
-                     (T("VaR 95%, 1 day"), lambda k: pct(bts[k].get("var95_1d"), 1, False))):
-        body += f'<tr><td class="l"><b>{label}</b></td>' + "".join(f'<td class="num">{f(k)}</td>' for k, _ in cols) + "</tr>"
-    head = "".join(f"<th>{esc(lbl)}</th>" for _, lbl in cols)
-    st.html(f'<div class="mb-sec">{T("Weights and statistics")} {src("calc")}</div><div class="mb-scroll"><table class="mb-tbl">'
-            f'<tr><th class="l">{T("Asset")}</th>{head}</tr>{body}</table></div>')
-    st.html(f'<div class="mb-sec">{T("Which one fits you")}</div><div class="mb-callout">{why_profile(opt, prof, cur)}</div>')
+        name = T("Cash") if k == pf.CASH else k
+        if k == pf.CASH:
+            verb = T("Invest") if d < 0 else T("Keep in cash")
+        else:
+            verb = T("Buy") if d > 0 else T("Sell")
+        chips += (f'<div class="mb-move {"up" if d > 0 else "down"}"><span class="vb">{esc(verb)}</span><b>{esc(name)}</b>'
+                  f'<span class="num">{"+" if d > 0 else "−"}{abs(d) * 100:.1f}%</span><span class="num amt">{money(abs(d) * total, 0)}</span></div>')
+    if not chips:
+        return '<p class="mb-foot">' + T("Your portfolio is already this mix.") + "</p>"
+    return (f'<div class="mb-sub">{T("Moves to get there")}</div><div class="mb-moves">{chips}</div>'
+            '<p class="mb-foot">' + T("Share of today's total value and its dollar amount. A guide for direction: nothing is traded, and taxes and fees are not included.") + "</p>")
+
+
+def why_selected(opt: dict, prof: dict, cur: dict, sel: dict, key: str | None) -> str:
+    if key == "profile":
+        return why_profile(opt, prof, cur)
+    v, r = pct(sel["vol"], 1, False), pct(sel["ret"], 1, False)
+    tv = pct(prof["target_vol"], 0, False)
+    fits = sel["vol"] <= prof["target_vol"] * 1.02
+    if key == "gmv":
+        head = T("Minimum variance is the calmest mix these assets allow ({v} expected swings, {r} expected return). It ignores return estimates, so it is the most robust to forecasting errors, but it usually earns the least.", v=v, r=r)
+    elif key == "max_sharpe":
+        head = T("Maximum Sharpe is the mix with the most expected return per unit of risk ({v} swings, {r} return). On paper it is the most efficient, but it leans heavily on return estimates, which are uncertain.", v=v, r=r)
+    else:
+        head = T("This is the best mix of these assets for {v} of expected swings: it maximises expected return ({r}) at that risk.", v=v, r=r)
+    tail = (T("It stays within the {tv} your {name} profile is comfortable with.", tv=tv, name=T(prof["name"])) if fits
+            else T("It is riskier than the {tv} your {name} profile is comfortable with, so expect bigger falls than you said you could take.", tv=tv, name=T(prof["name"])))
+    return head + " " + tail + " " + T("Optimisers amplify estimation errors, so treat these weights as a direction, not an exact recipe.")
 
 
 def why_profile(opt: dict, prof: dict, cur: dict) -> str:
