@@ -326,11 +326,42 @@ rendimientos esperados por CAPM y contracción de Ledoit-Wolf de la covarianza: 
 de mayor rendimiento dentro de la volatilidad del perfil. Las señales de recomendación salen de estos números; la IA solo las
 explica y la app nunca opera.
 
-#### Empresas comparables y research
+#### Empresas comparables
 Los pares son las empresas que Finnhub agrupa en la misma industria. Para cada múltiplo (P/U, EV/EBITDA, P/V, P/FCF, P/VL,
 últimos doce meses) la app toma la mediana de los pares y el valor que implica: precio de hoy × mediana de pares ÷ múltiplo de
-la empresa; los múltiplos negativos quedan fuera. La página Research publica tesis guardadas como archivos en el repositorio y
-mide cada recomendación desde su publicación contra el S&P 500 (con el signo invertido para ventas en corto).
+la empresa; los múltiplos negativos quedan fuera.
+
+#### Análisis de estados financieros y EVA
+Con el 10-K, por año fiscal: análisis horizontal (crecimiento), vertical (márgenes como % de los ingresos), liquidez (razón
+corriente y prueba ácida), apalancamiento (deuda / patrimonio, deuda neta / EBITDA, cobertura de intereses), actividad (rotación
+de activos, días de cobro, días de inventario), rentabilidad (ROA y ROE sobre saldos promedio) y la descomposición DuPont
+ROE = margen neto × rotación de activos × multiplicador de capital. Los chequeos de calidad de utilidades comparan el flujo
+operativo con la utilidad neta y las cuentas por cobrar con las ventas, y avisan si la compensación en acciones es alta. Valor
+económico agregado = NOPAT − WACC × capital empleado, con NOPAT = utilidad operativa × (1 − tasa efectiva de impuestos, 21% si no
+se puede medir) y capital empleado = deuda + patrimonio, promedio del año; el WACC es el definido en Valuación.
+
+#### Resultados trimestrales
+UPA reportada contra el consenso de analistas de los últimos trimestres (sorpresas de resultados de Finnhub), fechas de reporte con
+ingresos reales contra estimados (calendario de resultados de Finnhub) y el movimiento de cierre a cierre de la acción en la primera
+sesión después de cada reporte. Los ingresos y márgenes trimestrales salen de los 10-Q; el cuarto trimestre fiscal no tiene 10-Q,
+así que es el año (10-K) menos los tres primeros trimestres.
+
+#### Riesgo de cola, captura y alfa
+VaR histórico a un día (la pérdida que se supera el 5% o el 1% de los días) y expected shortfall (la pérdida promedio más allá),
+con dos años de rendimientos diarios reales, junto a lo que daría una distribución normal, más asimetría y exceso de curtosis. La
+captura al alza y a la baja usa dos años de rendimientos semanales contra SPY; el alfa es el alfa de Jensen a un año.
+
+#### Atribución de rendimiento
+Cada día, la contribución de cada posición es su peso al cierre anterior por su rendimiento de precio, más dividendos; las
+operaciones a precios distintos del cierre de ese día y las comisiones van a "operaciones y comisiones". Contra el S&P 500 (SPY,
+solo precio) la diferencia se reparte exacto en apuestas sectoriales Σ w × (ETF del sector − SPY), selección de acciones
+Σ w × (acción − ETF de su sector), efectivo −w_efectivo × SPY y operaciones. El sector sale de la industria de cada acción,
+asignada a los ETFs sectoriales SPDR; un ETF que tenés es su propio benchmark. Los efectos diarios se encadenan con el método de
+Carino para que sumen el rendimiento del período.
+
+#### Reportes PDF
+Los reportes de acción y de portafolio se arman al momento con los mismos números que muestra la app (y el texto de IA solo si ya
+lo generaste), con la fuente de cada bloque. No se guarda nada.
 
 #### Límites
 Los datos gratuitos pueden tener demora o fallar por momentos; cada número muestra su horario. La cobertura de la SEC varía
@@ -628,3 +659,175 @@ ES.update({
     "Your portfolio vs the recommended one": "Tu portafolio vs el recomendado",
     "Your portfolio vs an alternative": "Tu portafolio vs una alternativa",
 })
+
+# ---------------------------------------------------------------- earnings, statement analysis, attribution, PDF reports, data health
+ES.update({
+    # stock: sections and financial statement analysis
+    "Earnings": "Resultados", "Health checks": "Chequeos de salud", "latest fiscal year": "último año fiscal",
+    "Economic value added": "Valor económico agregado (EVA)", "Statement analysis": "Análisis de estados financieros",
+    "fiscal years · SEC 10-K": "años fiscales · 10-K de la SEC", "Not enough balance-sheet data for the checks.": "No hay datos de balance suficientes para los chequeos.",
+    "EVA needs equity and operating profit from the 10-K; not available here.": "El EVA necesita patrimonio y utilidad operativa del 10-K; no está disponible acá.",
+    "from your Valuation assumptions": "de tus supuestos de Valuación",
+    "default: CAPM with a 5% equity premium, as in Valuation": "por defecto: CAPM con 5% de prima de mercado, como en Valuación",
+    "FY{y}. NOPAT = operating income × (1 − {tax} tax); capital employed = debt + equity, average of the year; WACC {w}, {src}. {verdict}":
+        "AF{y}. NOPAT = utilidad operativa × (1 − {tax} de impuestos); capital empleado = deuda + patrimonio, promedio del año; WACC {w}, {src}. {verdict}",
+    "Return on capital beats its cost: the company creates value.": "El rendimiento sobre el capital supera su costo: la empresa crea valor.",
+    "Return on capital is below its cost: the company destroys value at this WACC.": "El rendimiento sobre el capital está por debajo de su costo: con este WACC la empresa destruye valor.",
+    "Capital employed": "Capital empleado", "EVA": "EVA",
+    "Balance-sheet ratios use the average of the opening and closing balance. DuPont splits ROE into net margin × asset turnover × equity multiplier, so you can see whether returns come from pricing power, efficiency or debt. n/a = the company doesn't report that line in a comparable way.":
+        "Los ratios de balance usan el promedio del saldo inicial y final. DuPont descompone el ROE en margen neto × rotación de activos × multiplicador de capital, para ver si el rendimiento viene del poder de precios, la eficiencia o la deuda. n/a = la empresa no reporta esa línea de forma comparable.",
+    "Growth (horizontal analysis)": "Crecimiento (análisis horizontal)", "Net income growth": "Crecimiento de la utilidad neta",
+    "Margins (vertical analysis, % of revenue)": "Márgenes (análisis vertical, % de ingresos)", "EBITDA margin": "Margen EBITDA",
+    "Stock compensation, % of revenue": "Compensación en acciones, % de ingresos", "Liquidity": "Liquidez", "Current ratio": "Razón corriente",
+    "Quick ratio": "Prueba ácida", "Leverage": "Apalancamiento", "Debt / equity": "Deuda / patrimonio", "Net debt / EBITDA": "Deuda neta / EBITDA",
+    "Interest coverage (EBIT / interest)": "Cobertura de intereses (EBIT / intereses)", "Activity": "Actividad", "Asset turnover": "Rotación de activos",
+    "Days sales outstanding": "Días de cobro", "Days inventory": "Días de inventario", "Profitability and DuPont": "Rentabilidad y DuPont",
+    "Return on assets (ROA)": "Rendimiento sobre activos (ROA)", "Return on equity (ROE)": "Rendimiento sobre patrimonio (ROE)",
+    "× Net margin": "× Margen neto", "× Asset turnover": "× Rotación de activos", "× Equity multiplier": "× Multiplicador de capital",
+    "Earnings quality": "Calidad de las utilidades", "Cash conversion (operating cash flow / net income)": "Conversión a caja (flujo operativo / utilidad neta)",
+    "Accruals ratio ((net income − operating cash flow) / assets)": "Ratio de devengos ((utilidad neta − flujo operativo) / activos)",
+    "Receivables growth − revenue growth": "Crecimiento de cuentas por cobrar − crecimiento de ingresos",
+    "Operating cash flow is {x} net income.": "El flujo de caja operativo es {x} la utilidad neta.",
+    "Operating cash flow is only {x} net income: check what is not turning into cash.": "El flujo de caja operativo es solo {x} la utilidad neta: revisá qué no se está convirtiendo en caja.",
+    "Customers take {d} days to pay, up from {p}: receivables are growing faster than sales.": "Los clientes tardan {d} días en pagar, contra {p} antes: las cuentas por cobrar crecen más rápido que las ventas.",
+    "Customers take {d} days to pay ({p} the year before): receivables are in line with sales.": "Los clientes tardan {d} días en pagar ({p} el año anterior): las cuentas por cobrar van en línea con las ventas.",
+    "Operating profit covers interest {x} times.": "La utilidad operativa cubre los intereses {x} veces.",
+    "Operating profit covers interest only {x} times (below 2x is a serious concern).": "La utilidad operativa cubre los intereses solo {x} veces (menos de 2x es una preocupación seria).",
+    "Current ratio of {x}: short-term assets cover short-term obligations.": "Razón corriente de {x}: los activos de corto plazo cubren las obligaciones de corto plazo.",
+    "Current ratio of {x}: short-term assets barely cover short-term obligations.": "Razón corriente de {x}: los activos de corto plazo apenas cubren las obligaciones de corto plazo.",
+    "Net debt is {x} EBITDA.": "La deuda neta es {x} el EBITDA.", "More cash than debt (net debt {x} EBITDA).": "Más efectivo que deuda (deuda neta {x} el EBITDA).",
+    "Stock compensation is {x} of revenue, so free cash flow overstates what owners earn.": "La compensación en acciones es {x} de los ingresos, así que el flujo de caja libre exagera lo que ganan los accionistas.",
+    # tail risk
+    "Tail risk: bad days": "Riesgo de cola: los días malos", "How often": "Con qué frecuencia", "Loss at least (VaR)": "Pérdida de al menos (VaR)",
+    "Average loss on those days (expected shortfall)": "Pérdida promedio esos días (expected shortfall)", "A normal bell curve would say": "Lo que diría una campana normal",
+    "1 day in 20": "1 día de cada 20", "1 day in 100": "1 día de cada 100",
+    "From {d} real daily returns. Skewness {sk}, excess kurtosis {ku}. {fat}": "Con {d} rendimientos diarios reales. Asimetría {sk}, exceso de curtosis {ku}. {fat}",
+    "Bad days are worse than the bell curve suggests (fat tails).": "Los días malos son peores de lo que sugiere la campana (colas gruesas).",
+    "Bad days are close to what the bell curve suggests.": "Los días malos se parecen a lo que sugiere la campana.",
+    # earnings tab
+    "Loading earnings…": "Cargando resultados…", "No earnings data for {t} (ETFs and funds don't report earnings).": "No hay datos de resultados para {t} (los ETFs y fondos no reportan resultados).",
+    "Next report": "Próximo reporte", "EPS estimate": "UPA estimada", "Revenue estimate": "Ingresos estimados", "Beat EPS estimates": "Superó la UPA estimada",
+    "{a} of {b}": "{a} de {b}", "Average EPS surprise": "Sorpresa promedio en UPA", "Average move on results": "Movimiento promedio con resultados",
+    "EPS: reported vs expected": "UPA: reportada vs esperada", "Expected": "Esperada", "Beat": "Superó", "Missed": "No alcanzó", "In line": "En línea",
+    "Next": "Próximo", "No reported EPS available.": "No hay UPA reportada.", "Each report": "Cada reporte", "Quarter": "Trimestre",
+    "Stock move": "Movimiento de la acción", "EPS": "UPA",
+    "Quarter = fiscal period end. Stock move = close-to-close on the first session after the report (the report day if it came before the open). Estimates are the analysts' consensus from Finnhub.":
+        "Trimestre = fin del período fiscal. Movimiento = de cierre a cierre en la primera sesión después del reporte (el mismo día si salió antes de la apertura). Las estimaciones son el consenso de analistas de Finnhub.",
+    "Quarterly results": "Resultados trimestrales", "SEC 10-Q and 10-K": "10-Q y 10-K de la SEC", "Quarter ending": "Trimestre al",
+    "vs a year ago": "vs hace un año",
+    "* Fourth fiscal quarter: there is no 10-Q for it, so it is the fiscal year from the 10-K minus the first three quarters.":
+        "* Cuarto trimestre fiscal: no tiene 10-Q, así que es el año fiscal del 10-K menos los tres primeros trimestres.",
+    "before the open": "antes de la apertura", "after the close": "después del cierre",
+    # markets earnings board
+    "Earnings this week": "Resultados de la semana", "Reported": "Reportaron", "Coming up": "Por reportar", "before open": "antes de la apertura",
+    "after close": "después del cierre", "est.": "est.", "revenue": "ingresos",
+    "Your watchlist and the largest US companies. {n} US companies report in the next seven days. Open a stock and its Earnings tab for the full record.":
+        "Tu watchlist y las empresas más grandes de EE.UU. {n} empresas de EE.UU. reportan en los próximos siete días. Abrí una acción y su pestaña Resultados para ver el historial completo.",
+    # compare
+    "Up capture": "Captura al alza", "Down capture": "Captura a la baja", "Alpha (1Y)": "Alfa (1A)",
+    "Over the selected period. Sharpe uses the 10-year Treasury as the risk-free rate; beta uses two years of weekly returns. The equal-weight portfolio holds the chosen stocks (not SPY) in equal parts, rebalanced daily. Up / down capture: how much of the S&P 500's rising and falling weeks the stock captured over two years (above 100% up and below 100% down is the ideal). Alpha: Jensen's alpha over one year, the return beyond what beta and the market explain.":
+        "En el período elegido. El Sharpe usa el bono del Tesoro a 10 años como tasa libre de riesgo; la beta usa dos años de rendimientos semanales. El portafolio de pesos iguales tiene las acciones elegidas (no SPY) en partes iguales, rebalanceado a diario. Captura al alza / a la baja: cuánto de las semanas de suba y de baja del S&P 500 capturó la acción en dos años (lo ideal es más de 100% al alza y menos de 100% a la baja). Alfa: el alfa de Jensen a un año, el rendimiento que no explican la beta ni el mercado.",
+    # data health
+    "Data health": "Estado de los datos", "checks each source live": "chequea cada fuente en vivo", "Run the check": "Correr el chequeo",
+    "Calling every source once…": "Consultando cada fuente una vez…", "Working": "Funciona", "Not answering": "No responde", "Source": "Fuente",
+    "Status": "Estado", "Time": "Tiempo", "Answer": "Respuesta",
+    "{a} of {b} sources answered. A source that fails here shows a notice on its page, and the rest of the app keeps working.":
+        "Respondieron {a} de {b} fuentes. Una fuente que falla acá muestra un aviso en su página, y el resto de la app sigue funcionando.",
+    "Quotes, profiles, news, earnings": "Cotizaciones, perfiles, noticias, resultados", "Price history": "Historial de precios",
+    "Treasury yields": "Rendimientos del Tesoro", "10-K / 10-Q financials": "Estados financieros 10-K / 10-Q", "Bitcoin": "Bitcoin",
+    "Argentine dollar rates": "Dólares en Argentina", "Reference exchange rates": "Tipos de cambio de referencia", "Country risk": "Riesgo país",
+    "Headlines (CNBC sample)": "Titulares (muestra de CNBC)", "AI text": "Texto de IA",
+    # portfolio attribution
+    "Attribution": "Atribución", "Since the start": "Desde el inicio", "Year to date": "En el año", "Last 12 months": "Últimos 12 meses",
+    "Last 3 months": "Últimos 3 meses", "Last month": "Último mes", "Measuring where the return came from…": "Midiendo de dónde vino el rendimiento…",
+    "Attribution needs at least a few trading days of history and prices for each position. Try a longer period.":
+        "La atribución necesita al menos algunos días de historia y precios de cada posición. Probá un período más largo.",
+    "Your return": "Tu rendimiento", "Sector bets": "Apuestas sectoriales", "Stock selection": "Selección de acciones", "Trading and fees": "Operaciones y comisiones",
+    "From {a} to {b} your portfolio returned {p} and the S&P 500 {s}, so you {verb} it by {d}. The biggest driver was {k} ({v}).":
+        "Del {a} al {b} tu portafolio rindió {p} y el S&P 500 {s}: {verb} por {d}. Lo que más pesó fue {k} ({v}).",
+    "beat": "le ganaste", "trailed": "quedaste atrás",
+    "{t} added the most ({v}).": "{t} fue la que más sumó ({v}).", "{t} cost the most ({v}).": "{t} fue la que más restó ({v}).",
+    "Why you beat or trailed the S&P 500": "Por qué le ganaste o quedaste atrás del S&P 500",
+    "Sector bets: holding sectors that did better or worse than the S&P 500 (each stock measured by its sector ETF). Stock selection: how each stock did against its own sector. Cash: the S&P 500 return you missed (or avoided) on uninvested cash. In percentage points; they add up to the difference.":
+        "Apuestas sectoriales: tener sectores que rindieron más o menos que el S&P 500 (cada acción medida con el ETF de su sector). Selección: cómo le fue a cada acción contra su propio sector. Efectivo: el rendimiento del S&P 500 que te perdiste (o evitaste) con el efectivo sin invertir. En puntos porcentuales; suman la diferencia.",
+    "Your portfolio vs the S&P 500": "Tu portafolio vs el S&P 500", "Contribution by position": "Contribución por posición",
+    "Weight × return of each position, day by day, including dividends and positions you no longer hold. They add up to your return (plus trading and fees, {t}).":
+        "Peso × rendimiento de cada posición, día a día, incluidos dividendos y posiciones que ya no tenés. Suman tu rendimiento (más operaciones y comisiones, {t}).",
+    "By sector": "Por sector", "Sector": "Sector", "Avg. weight": "Peso prom.", "Contribution": "Contribución", "Sector bet": "Apuesta sectorial",
+    "Selection": "Selección",
+    "Contribution and effects in percentage points. Sector bet = weight × (sector ETF − S&P 500); selection = weight × (stock − sector ETF). ETFs you hold are their own benchmark, so all of their effect is a sector bet.":
+        "Contribución y efectos en puntos porcentuales. Apuesta sectorial = peso × (ETF del sector − S&P 500); selección = peso × (acción − ETF del sector). Los ETFs que tenés son su propio benchmark, así que todo su efecto es apuesta sectorial.",
+    "Detail by position": "Detalle por posición", "Measured against": "Medida contra", "Days held": "Días en cartera", "Contribution (pp)": "Contribución (pp)",
+    "Daily effects are linked over the period with the Carino method, so they add up exactly. The S&P 500 is SPY's price (no dividends), the same benchmark as the Overview.":
+        "Los efectos diarios se encadenan en el período con el método de Carino, así que suman exacto. El S&P 500 es el precio de SPY (sin dividendos), el mismo benchmark que el Resumen.",
+    "Funds": "Fondos", "Other": "Otro",
+    # PDF reports
+    "PDF report": "Reporte PDF", "⤓ Download PDF": "⤓ Descargar PDF", "Building the report…": "Armando el reporte…",
+    "Building the report… (the first time it can take up to a minute while prices load)": "Armando el reporte… (la primera vez puede tardar hasta un minuto mientras cargan los precios)",
+    "A printable report with everything on this page: price, financials and ratios, valuation, peers, earnings, risk, Wall Street and the AI take if you generated it.":
+        "Un reporte imprimible con todo lo de esta página: precio, finanzas y ratios, valuación, comparables, resultados, riesgo, Wall Street y la opinión de la IA si la generaste.",
+    "A printable review: holdings, performance vs the S&P 500, attribution, risk, your profile and the recommended portfolio (plus the AI recommendations if you wrote them).":
+        "Una revisión imprimible: posiciones, rendimiento vs el S&P 500, atribución, riesgo, tu perfil y el portafolio recomendado (más las recomendaciones de la IA si las escribiste).",
+    "EQUITY REPORT": "REPORTE DE ACCIÓN", "Equity report": "Reporte de acción", "PORTFOLIO REPORT": "REPORTE DE PORTAFOLIO",
+    "Portfolio report": "Reporte de portafolio", "Portfolio review": "Revisión del portafolio",
+    "Market Brief · tomas-market-brief.streamlit.app · For information and learning, not investment advice":
+        "Market Brief · tomas-market-brief.streamlit.app · Con fines informativos y de aprendizaje, no es asesoría de inversión",
+    "Page {n}": "Página {n}", "Price vs the S&P 500, last year": "Precio vs el S&P 500, último año", "Financials and ratios": "Finanzas y ratios",
+    "Earnings record": "Historial de resultados", "Source: Twelve Data, Finnhub": "Fuente: Twelve Data, Finnhub",
+    "Source: market data · calculated": "Fuente: datos de mercado · calculado", "Source: SEC 10-K filings · calculated": "Fuente: reportes 10-K de la SEC · calculado",
+    "Calculated by the app": "Calculado por la app", "Source: Finnhub peers and multiples (TTM)": "Fuente: pares y múltiplos de Finnhub (12M)",
+    "Source: Finnhub, SEC": "Fuente: Finnhub, SEC", "Source: Finnhub recommendation trends": "Fuente: recomendaciones de analistas de Finnhub",
+    "AI-written from the app's data (Google Gemini)": "Escrito por IA con los datos de la app (Google Gemini)",
+    "AI-written from the app's numbers (Google Gemini)": "Escrito por IA con los números de la app (Google Gemini)",
+    "Every figure comes from the sources named in each section or is calculated from them; AI text is labeled. Statistics describe the past and don't predict the future. This report is for information and learning and is not investment advice.":
+        "Cada cifra viene de las fuentes indicadas en cada sección o se calcula a partir de ellas; el texto de IA está señalado. Las estadísticas describen el pasado y no predicen el futuro. Este reporte es informativo y de aprendizaje; no es asesoría de inversión.",
+    "As of {d}": "Al {d}", "1-year return": "Rendimiento a 1 año", "S&P 500 {x}": "S&P 500 {x}", "Wall Street": "Wall Street",
+    "{s} / 5 · {n} analysts": "{s} / 5 · {n} analistas", "AI lean": "Postura IA", "{g} vs price": "{g} vs el precio", "Bear – bull": "Pesimista – optimista",
+    "DCF scenarios": "Escenarios DCF",
+    "At ${p} the stock trades {g} its DCF value of ${v} (base case, {src}).": "A ${p} la acción cotiza {g} de su valor DCF de ${v} (caso base, {src}).",
+    "{x} below": "{x} por debajo", "{x} above": "{x} por encima", "your assumptions": "tus supuestos", "default assumptions": "supuestos por defecto",
+    "The price implies about {g} a year of free-cash-flow growth for five years.": "El precio implica un crecimiento del flujo de caja libre de cerca de {g} anual por cinco años.",
+    "Wall Street's consensus is {l} ({s} / 5).": "El consenso de Wall Street es {l} ({s} / 5).",
+    "Income and cash flow": "Resultados y flujo de caja", "Growth and margins": "Crecimiento y márgenes",
+    "Returns, DuPont and balance sheet": "Rentabilidad, DuPont y balance", "creates value": "crea valor", "destroys value": "destruye valor",
+    "debt + equity": "deuda + patrimonio", "NOPAT − WACC × capital employed. WACC {w}, {src}.": "NOPAT − WACC × capital empleado. WACC {w}, {src}.",
+    "DCF value (base)": "Valor DCF (base)", "Growth, years 1–5": "Crecimiento, años 1–5", "free cash flow": "flujo de caja libre",
+    "Discount rate": "Tasa de descuento", "Terminal growth": "Crecimiento terminal", "Price implies": "El precio implica",
+    "FCF growth, 5 years": "crecimiento del FCF, 5 años",
+    "Verdict under these assumptions: {l}. Bear case ${b} (growth −5 points, discount rate +1), bull case ${u} (the opposite). {src}":
+        "Veredicto con estos supuestos: {l}. Caso pesimista ${b} (crecimiento −5 puntos, tasa de descuento +1), optimista ${u} (lo contrario). {src}",
+    "Assumptions set in the app's Valuation tab.": "Supuestos definidos en la pestaña Valuación de la app.",
+    "Default assumptions: revenue CAGR capped at 0–20%, CAPM cost of equity with a 5% premium.": "Supuestos por defecto: CAGR de ingresos acotado a 0–20%, costo del capital por CAPM con 5% de prima.",
+    "Each bar is a range of values per share; the dashed line is today's price.": "Cada barra es un rango de valores por acción; la línea punteada es el precio de hoy.",
+    "Value per share at the peer median: {v}.": "Valor por acción a la mediana de los pares: {v}.",
+    "Trailing twelve months; negative multiples are not meaningful (n/m).": "Últimos doce meses; los múltiplos negativos no son significativos (n/m).",
+    "Hollow circle: analysts' estimate; filled: reported (green beat, red miss).": "Círculo vacío: estimación de los analistas; lleno: lo reportado (verde superó, rojo no alcanzó).",
+    "Next report: {d}, EPS estimate {e}.": "Próximo reporte: {d}, UPA estimada {e}.", "Volatility, 1 year": "Volatilidad, 1 año",
+    "Max drawdown, 1 year": "Caída máxima, 1 año", "1 day in 20, loss at least (VaR 95%)": "1 día de cada 20, pérdida de al menos (VaR 95%)",
+    "Average loss on those days (ES 95%)": "Pérdida promedio esos días (ES 95%)", "Up / down capture vs S&P 500": "Captura al alza / a la baja vs S&P 500",
+    "Alpha, 1 year (Jensen)": "Alfa, 1 año (Jensen)", "Consensus": "Consenso",
+    "Strong buy {a} · buy {b} · hold {c} · sell {d} · strong sell {e}. Sell-side ratings lean positive in general.":
+        "Compra fuerte {a} · compra {b} · mantener {c} · venta {d} · venta fuerte {e}. Las recomendaciones de los bancos suelen ser optimistas.",
+    "Holdings": "Posiciones", "Time-weighted return vs the S&P 500": "Rendimiento ponderado por tiempo vs el S&P 500",
+    "Performance attribution": "Atribución de rendimiento", "Recommended portfolio for your profile": "Portafolio recomendado para tu perfil",
+    "Recommendations (AI)": "Recomendaciones (IA)",
+    "Built from the transactions saved in this browser and market data; every figure is calculated by the app and AI text is labeled. Taxes and fees are not included. The app never trades. For information and learning, not investment advice.":
+        "Armado con las operaciones guardadas en este navegador y datos de mercado; cada cifra la calcula la app y el texto de IA está señalado. No incluye impuestos ni comisiones. La app nunca opera. Informativo y de aprendizaje, no es asesoría de inversión.",
+    "Today's weights over the last {d} trading days of real prices; cash counted as riskless. A position whose share of risk is far above its share of value is the one making the portfolio bumpy.":
+        "Pesos de hoy sobre los últimos {d} días hábiles de precios reales; el efectivo cuenta como sin riesgo. Una posición cuyo peso en el riesgo supera mucho a su peso en el valor es la que hace más volátil el portafolio.",
+    "{n} positions": "{n} posiciones", "since {d}": "desde el {d}", "No investor profile saved": "Sin perfil de inversionista guardado",
+    "Invested": "Invertido", "a year": "anual", "Effective positions": "Posiciones efectivas", "1 ÷ Σ weights²": "1 ÷ Σ pesos²",
+    "Since {d} the portfolio returned {p} (time-weighted) against {s} for the S&P 500.": "Desde el {d} el portafolio rindió {p} (ponderado por tiempo) contra {s} del S&P 500.",
+    "The largest position is {t} at {w} of the portfolio; the top three are {w3}.": "La posición más grande es {t}, con {w} del portafolio; las tres primeras suman {w3}.",
+    "Sector bets, stock selection, cash and trading add up to the difference with the S&P 500 (percentage points, linked daily).":
+        "Apuestas sectoriales, selección, efectivo y operaciones suman la diferencia con el S&P 500 (puntos porcentuales, encadenados día a día).",
+    "2 years": "2 años", "of the portfolio": "del portafolio", "Top 3 positions": "Top 3 posiciones",
+    "{n} profile: volatility up to {v}, drawdown up to {d}, one company up to {c}, cash and bonds at least {m}.":
+        "Perfil {n}: volatilidad hasta {v}, caída hasta {d}, una empresa hasta {c}, efectivo y bonos al menos {m}.",
+    "Of all the efficient mixes of these assets, the recommended one has the highest expected return whose volatility stays within the {tv} that fits a {name} profile. Expected return {r} and volatility {v}, against {r0} and {v0} for your portfolio today.":
+        "De todas las mezclas eficientes de estos activos, la recomendada es la de mayor rendimiento esperado cuya volatilidad se mantiene dentro del {tv} que corresponde a un perfil {name}. Rendimiento esperado {r} y volatilidad {v}, contra {r0} y {v0} de tu portafolio hoy.",
+    "Move": "Movimiento", "Others": "Otros",
+    "Markowitz, long-only, CAPM expected returns and Ledoit-Wolf risk; one company capped at the profile's limit. Optimisers amplify estimation errors: treat the weights as a direction, not a recipe. Nothing is traded.":
+        "Markowitz, sin ventas en corto, rendimientos esperados por CAPM y riesgo con Ledoit-Wolf; cada empresa limitada al tope del perfil. Los optimizadores amplifican los errores de estimación: tomá los pesos como una dirección, no como una receta. No se opera nada.",
+})
+ES.update({"Surprise": "Sorpresa"})

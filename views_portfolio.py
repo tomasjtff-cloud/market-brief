@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import html
 import json
 import re
 import time
@@ -26,7 +27,7 @@ from i18n import D, T, choice, lang
 from ui import P, chip, esc, link, signed_class, src
 from views_market import page_header, quick_value
 
-SECTIONS = ["Overview", "Transactions", "Risk", "Investor profile", "News impact", "Optimization", "Recommendations", "Simulator"]
+SECTIONS = ["Overview", "Attribution", "Transactions", "Risk", "Investor profile", "News impact", "Optimization", "Recommendations", "Simulator"]
 ACTION_CLASS = {"Buy more": "up", "Add new": "up", "Hold": "hold", "Keep as is": "hold", "Fine-tune": "hold",
                 "Reduce": "down", "Sell": "down", "Rebalance": "flat"}
 EFFECT_CLASS = {"Positive": "up", "Negative": "down", "Mixed": "hold", "Uncertain": "flat"}
@@ -120,13 +121,17 @@ def page_portfolio() -> None:
     if not s["txs"]:
         onboarding()
         return
-    section = choice(st.segmented_control, "Portfolio section", SECTIONS, key="pf_section", default="Overview",
-                     label_visibility="collapsed") or "Overview"
+    sel_col, pdf_col = st.columns([6, 1.1], vertical_alignment="center")
+    with sel_col:
+        section = choice(st.segmented_control, "Portfolio section", SECTIONS, key="pf_section", default="Overview",
+                         label_visibility="collapsed") or "Overview"
+    with pdf_col:
+        pdf_controls(s)
     st.html('<div style="height:.2rem"></div>')
-    hp.show({"Overview": "pf_overview", "Transactions": "pf_transactions", "Risk": "pf_risk", "Investor profile": "pf_profile",
+    hp.show({"Overview": "pf_overview", "Attribution": "pf_attribution", "Transactions": "pf_transactions", "Risk": "pf_risk", "Investor profile": "pf_profile",
              "News impact": "pf_news", "Optimization": "pf_optimization", "Recommendations": "pf_recommendations",
              "Simulator": "pf_simulator"}.get(section, ""))
-    {"Overview": overview, "Transactions": transactions, "Risk": risk_section, "Investor profile": profile_section,
+    {"Overview": overview, "Attribution": attribution_section, "Transactions": transactions, "Risk": risk_section, "Investor profile": profile_section,
      "News impact": news_impact, "Optimization": optimization, "Recommendations": recommendations,
      "Simulator": simulator}[section](s)
 
@@ -169,6 +174,106 @@ def example_book() -> dict | None:
            {"type": "dividend", "date": idx[-30].date().isoformat(), "ticker": "AAPL", "amount": 3.9}]
     book, _ = pf.clean_book({"transactions": txs})
     return book
+
+
+# =========================================================================== Attribution
+PERIODS = ["Since the start", "Year to date", "Last 12 months", "Last 3 months", "Last month"]
+EFFECT_LABELS = {"sector": "Sector bets", "selection": "Stock selection", "cash": "Cash", "trading": "Trading and fees"}
+
+
+def attribution_data(s: dict, period: str) -> dict | None:
+    names = sorted({t["ticker"] for t in s["txs"] if t.get("ticker")})
+    sectors = {}
+    for t in names:
+        m = s["meta"].get(t) or ticker_meta(t)
+        sectors[t] = pf.sector_of(t, m.get("industry"), m.get("etf"))
+    etfs = sorted({e for _, e in sectors.values() if e not in names and e != "SPY"})
+    closes, missing = load_closes(names + etfs + ["SPY"])
+    if "SPY" not in closes:
+        return None
+    today = pd.Timestamp(dt.date.today())
+    start = {"Year to date": pd.Timestamp(dt.date(today.year, 1, 1)) - pd.Timedelta(days=1),
+             "Last 12 months": today - pd.DateOffset(years=1), "Last 3 months": today - pd.DateOffset(months=3),
+             "Last month": today - pd.DateOffset(months=1)}.get(period)
+    res = pf.attribution(s["txs"], {k: v for k, v in closes.items() if k != "SPY"}, sectors, closes["SPY"], start=start)
+    if res:
+        res["missing"] = missing
+    return res
+
+
+def attribution_section(s: dict) -> None:
+    period = choice(st.segmented_control, "Period", PERIODS, key="pf_attr_period", default=PERIODS[0],
+                    label_visibility="collapsed") or PERIODS[0]
+    with st.spinner(T("Measuring where the return came from…")):
+        a = attribution_data(s, period)
+    if not a:
+        st.info(T("Attribution needs at least a few trading days of history and prices for each position. Try a longer period."))
+        return
+    e = a["effects"]
+    st.html(stat_grid([
+        (T("Your return"), pct(a["port"]), signed_class(a["port"])), (T("S&P 500"), pct(a["bench"]), signed_class(a["bench"])),
+        (T("Difference"), f'{a["active"] * 100:+.2f} pp', signed_class(a["active"])),
+        (T("Sector bets"), f'{e["sector"] * 100:+.2f} pp', signed_class(e["sector"])),
+        (T("Stock selection"), f'{e["selection"] * 100:+.2f} pp', signed_class(e["selection"])),
+        (T("Cash"), f'{e["cash"] * 100:+.2f} pp', signed_class(e["cash"])),
+        (T("Trading and fees"), f'{e["trading"] * 100:+.2f} pp', signed_class(e["trading"])),
+    ], cols=7))
+    biggest = max(e, key=lambda k: abs(e[k]))
+    top = a["by_ticker"].iloc[0] if len(a["by_ticker"]) else None
+    low = a["by_ticker"].iloc[-1] if len(a["by_ticker"]) > 1 else None
+    msg = T("From {a} to {b} your portfolio returned {p} and the S&P 500 {s}, so you {verb} it by {d}. The biggest driver was {k} ({v}).",
+            a=D(a["start"], "%b %-d, %Y"), b=D(a["end"], "%b %-d, %Y"), p=pct(a["port"]), s=pct(a["bench"]),
+            verb=T("beat") if a["active"] >= 0 else T("trailed"), d=f'{abs(a["active"]) * 100:.2f} pp',
+            k=T(EFFECT_LABELS[biggest]).lower(), v=f'{e[biggest] * 100:+.2f} pp')
+    if top is not None:
+        msg += " " + T("{t} added the most ({v}).", t=top["ticker"], v=f'{top["contribution"] * 100:+.2f} pp')
+    if low is not None and low["contribution"] < 0:
+        msg += " " + T("{t} cost the most ({v}).", t=low["ticker"], v=f'{low["contribution"] * 100:+.2f} pp')
+    st.html(f'<div class="mb-callout">{esc(msg)}</div>')
+
+    l, r = st.columns([1, 1.15], gap="medium")
+    with l:
+        st.html(f'<div class="mb-sec">{T("Why you beat or trailed the S&P 500")} {src("calc")}</div>')
+        keys = ["sector", "selection", "cash", "trading"]
+        st.plotly_chart(charts.attribution_bars([T(EFFECT_LABELS[k]) for k in keys], [e[k] for k in keys], height=230),
+                        config=charts.CONFIG, key=f"pf_attr_fx_{lang()}_{period}")
+        st.html('<p class="mb-foot">' + T("Sector bets: holding sectors that did better or worse than the S&P 500 (each stock measured by its sector ETF). Stock selection: how each stock did against its own sector. Cash: the S&P 500 return you missed (or avoided) on uninvested cash. In percentage points; they add up to the difference.") + "</p>")
+    with r:
+        st.html(f'<div class="mb-sec">{T("Your portfolio vs the S&P 500")} {src("calc")}</div>')
+        cum = a["cum"]
+        st.plotly_chart(charts.compare_lines({T("Portfolio"): 1 + cum["portfolio"], "SPY": 1 + cum["benchmark"]},
+                                             highlight=T("Portfolio"), height=260),
+                        config=charts.CONFIG, key=f"pf_attr_cum_{lang()}_{period}")
+
+    l2, r2 = st.columns([1, 1.15], gap="medium")
+    bt = a["by_ticker"]
+    with l2:
+        st.html(f'<div class="mb-sec">{T("Contribution by position")} {src("calc")}</div>')
+        if len(bt):
+            st.plotly_chart(charts.attribution_bars(list(bt["ticker"]), list(bt["contribution"]), height=max(200, 34 * len(bt) + 40)),
+                            config=charts.CONFIG, key=f"pf_attr_tk_{lang()}_{period}")
+            st.html('<p class="mb-foot">' + T("Weight × return of each position, day by day, including dividends and positions you no longer hold. They add up to your return (plus trading and fees, {t}).",
+                                               t=f'{a["trading_total"] * 100:+.2f} pp') + "</p>")
+    with r2:
+        st.html(f'<div class="mb-sec">{T("By sector")} {src("calc")}</div>')
+        bs = a["by_sector"]
+        body = "".join(
+            f'<tr><td class="l">{esc(T(x.sector))}</td><td class="num">{pct(x.avg_weight, 1, False)}</td>'
+            + "".join(f'<td class="num {signed_class(v)}">{v * 100:+.2f}</td>' for v in (x.contribution, x.allocation, x.selection)) + "</tr>"
+            for x in bs.itertuples())
+        st.html(f'<div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">{T("Sector")}</th><th>{T("Avg. weight")}</th>'
+                f'<th>{T("Contribution")}</th><th>{T("Sector bet")}</th><th>{T("Selection")}</th></tr>{body}</table></div>'
+                '<p class="mb-foot">' + T("Contribution and effects in percentage points. Sector bet = weight × (sector ETF − S&P 500); selection = weight × (stock − sector ETF). ETFs you hold are their own benchmark, so all of their effect is a sector bet.") + "</p>")
+    rows = "".join(
+        f'<tr><td class="l"><a href="{link({"p": "stock", "t": x.ticker})}" target="_self">{esc(x.ticker)}</a></td><td class="l">{esc(T(x.sector))}</td>'
+        f'<td class="l">{esc(x.benchmark)}</td><td class="num">{pct(x.avg_weight, 1, False)}</td><td class="num">{x.days}</td>'
+        f'<td class="num {signed_class(x.contribution)}">{x.contribution * 100:+.2f}</td></tr>' for x in bt.itertuples())
+    with st.expander(T("Detail by position")):
+        st.html(f'<div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">Ticker</th><th class="l">{T("Sector")}</th>'
+                f'<th class="l">{T("Measured against")}</th><th>{T("Avg. weight")}</th><th>{T("Days held")}</th><th>{T("Contribution (pp)")}</th></tr>{rows}</table></div>'
+                '<p class="mb-foot">' + T("Daily effects are linked over the period with the Carino method, so they add up exactly. The S&P 500 is SPY's price (no dividends), the same benchmark as the Overview.") + "</p>")
+    if a.get("missing"):
+        st.caption(T("Left out for lack of price history: {t}.", t=", ".join(a["missing"])))
 
 
 # =========================================================================== Overview
@@ -485,7 +590,7 @@ def profile_section(s: dict) -> None:
     st.html('<div class="mb-panel">' + "".join(check_html(c) for c in checks) + "</div>")
 
 
-def check_html(c: dict) -> str:
+def check_html(c: dict, plain: bool = False):
     cls = {"high": "down", "medium": "hold", "ok": "up"}[c["level"]]
     word = {"high": "Mismatch", "medium": "Watch", "ok": "In line"}[c["level"]]
     v, lim = pct(c["value"], 1, False), pct(c["limit"], 0, False)
@@ -499,6 +604,8 @@ def check_html(c: dict) -> str:
         "safe_low": T("Cash and bonds are {v} of the portfolio; with your liquidity needs and profile at least {l} is advisable.", v=v, l=lim),
         "sector_high": T("{s} is {v} of the portfolio: a sector-specific shock would hit a large part of it.", s=esc(T(c.get("sector", ""))), v=v),
     }
+    if plain:
+        return word, msgs[c["code"]]
     return f'<div class="mb-check">{badge(word, cls)}<p class="mb-p">{msgs[c["code"]]}</p></div>'
 
 
@@ -971,6 +1078,7 @@ def recommendations(s: dict) -> None:
         except Exception as exc:
             st.warning(T("The recommendations couldn't be written this time ({e}). The computed signals above still apply.", e=exc))
             return
+    st.session_state["pf_advice"] = {"lang": lang(), "sig": sig, **adv}
     ov = adv.get("overall") or {}
     st.html(f'<div class="mb-story top"><div class="mb-kicker">{T("Overall")} {src("ai")}</div>'
             f'<div class="mb-take-row" style="margin:.3rem 0 .5rem">{badge(ov.get("stance", "Keep as is"), ACTION_CLASS.get(ov.get("stance"), "hold"))}</div>'
@@ -1073,3 +1181,140 @@ def simulator(s: dict) -> None:
     st.plotly_chart(charts.grouped_bars([T("Cash") if c == pf.CASH else c for c in cats],
                                         [(T("Now"), [w_before.get(c, 0) for c in cats], "faint"), (T("Simulated"), [w_after.get(c, 0) for c in cats], "accent")]),
                     config=charts.CONFIG, key=f"pf_sim_bars_{lang()}")
+
+
+# =========================================================================== PDF report
+def portfolio_report_data(s: dict) -> dict:
+    from reportlab.lib.colors import HexColor
+    UP_C, DOWN_C, AMBER_C = HexColor("#0E9F6E"), HexColor("#D64545"), HexColor("#C98A00")
+    tone = lambda x: (UP_C if x > 0 else DOWN_C if x < 0 else None) if x is not None else None  # noqa: E731
+    table, pos, total = s["table"], s["pos"], s["total"]
+    inv = table[table["ticker"] != pf.CASH]
+    unreal = float(inv["unrealized"].fillna(0).sum())
+    cost = float(inv["cost"].sum())
+    closes, _ = load_closes(sorted({t["ticker"] for t in s["txs"] if t.get("ticker")}) + ["SPY"])
+    vh = pf.value_history(s["txs"], {k: v for k, v in closes.items() if k != "SPY"})
+    twr = float(vh["twr_index"].iloc[-1] - 1) if len(vh) else None
+    spy_ret, perf = None, None
+    if len(vh) and "SPY" in closes:
+        spy = closes["SPY"].reindex(vh.index).ffill()
+        spy_ret = float(spy.iloc[-1] / spy.iloc[0] - 1)
+        perf = {"port": list((vh["twr_index"] / vh["twr_index"].iloc[0] - 1) * 100), "bench": list((spy / spy.iloc[0] - 1) * 100),
+                "dates": [D(d, "%b %Y") for d in vh.index]}
+    r = risk_of(s) or {}
+    conc = pf.concentration(table, {t: m["etf"] for t, m in s["meta"].items()})
+    prof = s["profile"]
+    L = {"kicker": T("PORTFOLIO REPORT"), "title": T("Portfolio review"), "band": T("Portfolio report") + " · " + D(dt.date.today(), "%b %-d, %Y"),
+         "footer": T("Market Brief · tomas-market-brief.streamlit.app · For information and learning, not investment advice"),
+         "page": T("Page {n}"), "holdings": T("Holdings"), "by_position": T("By position"), "by_sector": T("By sector"),
+         "performance": T("Time-weighted return vs the S&P 500"), "you": T("Portfolio"), "attribution": T("Performance attribution"),
+         "contrib": T("Contribution by position"), "risk": T("Risk"), "profile": T("Investor profile"),
+         "recommended": T("Recommended portfolio for your profile"), "ai": T("Recommendations (AI)"),
+         "src_mkt_calc": T("Source: market data · calculated"), "src_calc": T("Calculated by the app"),
+         "src_ai": T("AI-written from the app's numbers (Google Gemini)"),
+         "disclaimer": T("Built from the transactions saved in this browser and market data; every figure is calculated by the app and AI text is labeled. Taxes and fees are not included. The app never trades. For information and learning, not investment advice.")}
+    out: dict = {"labels": L}
+    first = min(t["date"] for t in s["txs"])
+    out["meta_line"] = " · ".join([T("{n} positions", n=len(s["tickers"])), T("since {d}", d=D(dt.date.fromisoformat(first), "%b %-d, %Y")),
+                                   (T("Profile") + ": " + T(prof["name"])) if prof else T("No investor profile saved")])
+    out["kpis"] = [(T("Total value"), money(total, 0), "", None), (T("Invested"), money(float(inv["value"].fillna(0).sum()), 0), "", None),
+                   (T("Cash"), money(pos["cash"], 0), pct(s["weights"].get(pf.CASH, 0), 1, False), None),
+                   (T("Unrealized P&L"), money(unreal, 0), pct(unreal / cost if cost else None), tone(unreal)),
+                   (T("Time-weighted return"), pct(twr), T("S&P 500 {x}", x=pct(spy_ret)) if spy_ret is not None else "", tone(twr)),
+                   (T("Volatility"), pct(r.get("vol"), 1, False), T("a year"), None),
+                   (T("VaR 95%, 1 day"), money(r.get("var95_1d_usd"), 0), pct(r.get("var95_1d"), 1, False), None),
+                   (T("Effective positions"), f'{conc["effective_n"]:.1f}', T("1 ÷ Σ weights²"), None)]
+    bits = []
+    if twr is not None and spy_ret is not None:
+        bits.append(T("Since {d} the portfolio returned {p} (time-weighted) against {s} for the S&P 500.",
+                      d=D(dt.date.fromisoformat(first), "%b %-d, %Y"), p=pct(twr), s=pct(spy_ret)))
+    if conc.get("top_ticker"):
+        bits.append(T("The largest position is {t} at {w} of the portfolio; the top three are {w3}.", t=conc["top_ticker"],
+                      w=pct(conc["top_weight"], 1, False), w3=pct(conc["top3_weight"], 0, False)))
+    out["summary"] = " ".join(bits)
+    out["hold_header"] = ["Ticker", T("Company"), T("Shares"), T("Avg. cost"), T("Price"), T("Value"), T("Weight"), T("Return")]
+    out["hold_rows"] = [[x.ticker, (x.name or "")[:28], f"{x.shares:,.4g}", f"${x.avg_cost:,.2f}", f"${x.price:,.2f}" if x.price else "n/a",
+                         money(x.value, 1) if x.value else "n/a", pct(x.weight, 1, False),
+                         (pct(x.unrealized_pct, 1), tone(x.unrealized_pct)) if x.unrealized_pct is not None else "n/a"]
+                        for x in inv.sort_values("value", ascending=False).itertuples()]
+    out["hold_rows"].append([T("Cash"), "", "", "", "", money(pos["cash"], 1), pct(s["weights"].get(pf.CASH, 0), 1, False), ""])
+    w = sorted(((T("Cash") if k == pf.CASH else k, v) for k, v in s["weights"].items()), key=lambda kv: -kv[1])
+    out["alloc_pos"] = w[:7] + ([(T("Others"), sum(v for _, v in w[7:]))] if len(w) > 7 else [])
+    secs = table.groupby("sector")["weight"].sum().sort_values(ascending=False)
+    out["alloc_sec"] = [(T(k), float(v)) for k, v in secs.items()][:9]
+    out["perf"] = perf
+    a = attribution_data(s, PERIODS[0])
+    if a:
+        e = a["effects"]
+        keys = ["sector", "selection", "cash", "trading"]
+        bt = a["by_ticker"]
+        out["attr"] = {"kpis": [(T("Your return"), pct(a["port"]), "", tone(a["port"])), ("S&P 500", pct(a["bench"]), "", tone(a["bench"])),
+                                (T("Difference"), f'{a["active"] * 100:+.2f} pp', "", tone(a["active"]))],
+                       "effect_labels": [T(EFFECT_LABELS[k]) for k in keys], "effect_values": [e[k] * 100 for k in keys],
+                       "tick_labels": list(bt["ticker"])[:10], "tick_values": [v * 100 for v in list(bt["contribution"])[:10]],
+                       "note": T("Sector bets, stock selection, cash and trading add up to the difference with the S&P 500 (percentage points, linked daily)."),
+                       "sector_header": [T("Sector"), T("Avg. weight"), T("Contribution"), T("Sector bet"), T("Selection")],
+                       "sector_rows": [[T(x.sector), pct(x.avg_weight, 1, False)] + [(f"{v * 100:+.2f}", tone(v)) for v in (x.contribution, x.allocation, x.selection)]
+                                       for x in a["by_sector"].itertuples()]}
+    if r.get("vol"):
+        out["risk_kpis"] = [(T("Volatility"), pct(r["vol"], 1, False), "", None), (T("Sharpe ratio"), num(r["sharpe"]), "", None),
+                            (T("Beta vs S&P 500"), num(r["beta"]), "", None), (T("Max drawdown"), pct(r["max_drawdown"], 1), T("2 years"), DOWN_C),
+                            (T("VaR 95%, 1 day"), money(r["var95_1d_usd"], 0), pct(r["var95_1d"], 1, False), None),
+                            (T("CVaR 95%, 1 day"), money(r["cvar95_1d_usd"], 0), pct(r["cvar95_1d"], 1, False), None),
+                            (T("VaR 95%, 1 month"), money(r["var95_1m_param_usd"], 0), pct(r["var95_1m_param"], 1, False), None),
+                            (T("Top 3 positions"), pct(conc["top3_weight"], 0, False), T("of the portfolio"), None)]
+        rc = r.get("risk_contrib") or {}
+        out["risk_header"] = ["Ticker", T("Share of value"), T("Share of risk")]
+        out["risk_rows"] = [[t, pct(s["weights"].get(t, 0), 1, False), pct(rc[t], 1, False)]
+                            for t in sorted(rc, key=rc.get, reverse=True) if t != pf.CASH][:10]
+        out["risk_note"] = T("Today's weights over the last {d} trading days of real prices; cash counted as riskless. A position whose share of risk is far above its share of value is the one making the portfolio bumpy.", d=r.get("days"))
+    if prof:
+        safe_w = conc["cash_weight"] + sum(v for t, v in s["weights"].items() if pf.ETF_SECTOR.get(t) == "Bonds")
+        cols = {"In line": UP_C, "Watch": AMBER_C, "Mismatch": DOWN_C}
+        checks = [check_html(c, plain=True) for c in pf.profile_checks(prof, r, conc, safe_w)]
+        out["profile"] = {"line": T("{n} profile: volatility up to {v}, drawdown up to {d}, one company up to {c}, cash and bonds at least {m}.",
+                                    n=T(prof["name"]), v=pct(prof["target_vol"], 0, False), d=pct(prof["max_drawdown"], 0, False),
+                                    c=pct(prof["single_cap"], 0, False), m=pct(prof["min_safe"], 0, False)),
+                          "checks": [(T(w_) + ": " + html.unescape(re.sub("<[^>]+>", "", m_)), cols.get(w_)) for w_, m_ in checks]}
+    opt, profx = optimise_for(s, st.session_state.get("pf_opt_div", True))
+    if opt and opt.get("profile"):
+        o = opt["profile"]
+        cur = current_point(s, opt)
+        sel = o.get("weights", {})
+        names = list(dict.fromkeys([t for t in s["tickers"]] + sorted(sel, key=lambda k: -sel[k]) + [pf.CASH]))
+        out["opt"] = {"line": T("Of all the efficient mixes of these assets, the recommended one has the highest expected return whose volatility stays within the {tv} that fits a {name} profile. Expected return {r} and volatility {v}, against {r0} and {v0} for your portfolio today.",
+                                tv=pct(profx["target_vol"], 0, False), name=T(profx["name"]), r=pct(o["ret"], 1, False), v=pct(o["vol"], 1, False),
+                                r0=pct(cur.get("ret"), 1, False), v0=pct(cur.get("vol"), 1, False)),
+                      "header": [T("Asset"), T("Today"), T("Recommended"), T("Change")],
+                      "rows": [[T("Cash") if k == pf.CASH else k, pct(s["weights"].get(k, 0), 1, False), pct(sel.get(k, 0), 1, False),
+                                (f'{(sel.get(k, 0) - s["weights"].get(k, 0)) * 100:+.1f} pp', tone(sel.get(k, 0) - s["weights"].get(k, 0)))]
+                               for k in names if max(sel.get(k, 0), s["weights"].get(k, 0)) > 0.0005],
+                      "move_header": [T("Move"), T("Asset"), T("Share of value"), T("Amount")],
+                      "moves": [[T("Buy") if d_ > 0 else T("Sell"), T("Cash") if k == pf.CASH else k, f"{abs(d_) * 100:.1f}%", money(abs(d_) * total, 0)]
+                                for k, d_ in sorted(((k, sel.get(k, 0) - s["weights"].get(k, 0)) for k in set(sel) | set(s["weights"])), key=lambda kv: -abs(kv[1]))
+                                if abs(d_) >= 0.005 and k != pf.CASH],
+                      "note": T("Markowitz, long-only, CAPM expected returns and Ledoit-Wolf risk; one company capped at the profile's limit. Optimisers amplify estimation errors: treat the weights as a direction, not a recipe. Nothing is traded.")}
+    adv = st.session_state.get("pf_advice")
+    if adv and adv.get("lang") == lang():
+        paras = []
+        if (adv.get("overall") or {}).get("summary"):
+            paras.append(T(adv["overall"].get("stance", "")) + ". " + adv["overall"]["summary"])
+        for i in adv.get("items", []):
+            paras.append(f'{i.get("ticker", "")} · {T(i.get("action", ""))}. {i.get("what", "")} {i.get("why", "")} {T("Downsides.")} {i.get("downsides", "")}')
+        out["ai"] = paras
+    return out
+
+
+def pdf_controls(s: dict) -> None:
+    adv = st.session_state.get("pf_advice") or {}
+    sig = signature(s, f"pdf|{lang()}|{adv.get('sig', '')}")
+    key = f"pf_pdf_{sig}"
+    if key in st.session_state:
+        st.download_button(T("⤓ Download PDF"), data=st.session_state[key], file_name=f"Portfolio_Market_Brief_{dt.date.today():%Y-%m-%d}.pdf",
+                           mime="application/pdf", width="stretch", key=f"dl_{key}")
+    elif st.button(T("PDF report"), key=f"mk_{key}", width="stretch",
+                   help=T("A printable review: holdings, performance vs the S&P 500, attribution, risk, your profile and the recommended portfolio (plus the AI recommendations if you wrote them).")):
+        with st.spinner(T("Building the report… (the first time it can take up to a minute while prices load)")):
+            import reports
+            st.session_state[key] = reports.portfolio_pdf(portfolio_report_data(s))
+        st.rerun()

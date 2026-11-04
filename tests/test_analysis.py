@@ -159,6 +159,61 @@ def test_peer_implied_and_parse():
     out = analysis.peer_implied(own, peers, 300)
     assert out["P/E"]["median"] == 22 and abs(out["P/E"]["implied"] - 300 * 22 / 30) < 1e-9
     assert out["EV/EBITDA"]["implied"] is None  # own multiple negative: not meaningful
-    import views_research as vr
-    meta, body = vr.parse("---\ntitle: Test: a thesis\nticker: aapl\ndate: 2026-01-05\ncall: long\n---\n## Thesis\nText")
-    assert meta["title"] == "Test: a thesis" and meta["ticker"] == "aapl" and body.startswith("## Thesis")
+
+
+def _facts():
+    def flow(tag, vals):  # vals: list of (frame, start, end, val)
+        return {tag: {"units": {"USD": [{"frame": f, "start": s, "end": e, "val": v, "form": "10-K", "filed": "2026-01-01"} for f, s, e, v in vals]}}}
+    def inst(tag, vals):
+        return {tag: {"units": {"USD": [{"end": e, "val": v, "form": "10-K", "filed": "2026-01-01"} for e, v in vals]}}}
+    g = {}
+    # fiscal year ends in September, like Apple: annual frame CY2025 = Oct 2024 - Sep 2025
+    g.update(flow("Revenues", [("CY2024", "2023-10-01", "2024-09-30", 400.0), ("CY2025", "2024-10-01", "2025-09-30", 440.0),
+                               ("CY2024Q4", "2024-10-01", "2024-12-31", 120.0), ("CY2025Q1", "2025-01-01", "2025-03-31", 100.0),
+                               ("CY2025Q2", "2025-04-01", "2025-06-30", 105.0)]))
+    g.update(flow("NetIncomeLoss", [("CY2024", "2023-10-01", "2024-09-30", 40.0), ("CY2025", "2024-10-01", "2025-09-30", 50.0)]))
+    g.update(flow("OperatingIncomeLoss", [("CY2024", "2023-10-01", "2024-09-30", 60.0), ("CY2025", "2024-10-01", "2025-09-30", 70.0)]))
+    g.update(flow("GrossProfit", [("CY2024", "2023-10-01", "2024-09-30", 160.0), ("CY2025", "2024-10-01", "2025-09-30", 180.0)]))
+    g.update(flow("NetCashProvidedByUsedInOperatingActivities", [("CY2024", "2023-10-01", "2024-09-30", 55.0), ("CY2025", "2024-10-01", "2025-09-30", 45.0)]))
+    g.update(flow("InterestExpense", [("CY2025", "2024-10-01", "2025-09-30", 7.0)]))
+    g.update(inst("Assets", [("2024-09-30", 500.0), ("2025-09-30", 540.0), ("2023-12-31", 1.0)]))
+    g.update(inst("StockholdersEquity", [("2024-09-30", 200.0), ("2025-09-30", 220.0)]))
+    g.update(inst("AssetsCurrent", [("2025-09-30", 150.0)]))
+    g.update(inst("LiabilitiesCurrent", [("2025-09-30", 100.0)]))
+    g.update(inst("LongTermDebt", [("2024-09-30", 80.0), ("2025-09-30", 60.0)]))
+    return {"entityName": "Test", "facts": {"us-gaap": g, "dei": {}}}
+
+
+def test_fundamentals_balance_and_quarters():
+    import fundamentals
+    f = fundamentals.build(_facts())
+    assert f["balance"]["assets"].to_dict() == {2024: 500.0, 2025: 540.0}
+    q = f["quarters"]["revenue"]
+    assert list(q["end"]) == ["2024-12-31", "2025-03-31", "2025-06-30", "2025-09-30"]
+    last = q.iloc[-1]
+    assert last["derived"] and last["value"] == 440 - 120 - 100 - 105
+    r = analysis.statement_analysis(f)
+    assert r.loc["revenue_growth", 2025] == pytest.approx(0.1)
+    assert r.loc["roe", 2025] == pytest.approx(50 / 210)
+    assert r.loc["current_ratio", 2025] == pytest.approx(1.5)
+    assert r.loc["interest_coverage", 2025] == pytest.approx(10.0)
+    assert r.loc["roe", 2025] == pytest.approx(r.loc["net_margin", 2025] * r.loc["asset_turnover", 2025] * r.loc["equity_multiplier", 2025])
+    e = analysis.eva(f, 0.09, tax=0.2)
+    assert e.loc[2025, "nopat"] == pytest.approx(56.0) and e.loc[2025, "capital"] == pytest.approx((280 + 280) / 2)
+    assert e.loc[2025, "eva"] == pytest.approx(56 - 0.09 * 280)
+    checks = analysis.health_checks(r)
+    assert any("cash flow" in m for _, m, _ in checks)
+
+
+def test_capture_tails_and_reaction():
+    idx = pd.bdate_range("2024-01-01", periods=520)
+    rng = np.random.default_rng(3)
+    b = pd.Series(100 * np.cumprod(1 + rng.normal(0.0004, 0.01, len(idx))), index=idx)
+    s = b ** 1.0  # identical to the benchmark
+    ca = analysis.capture_alpha(s, b, 0.04)
+    assert ca["up_capture"] == pytest.approx(1.0) and ca["down_capture"] == pytest.approx(1.0) and abs(ca["alpha"]) < 1e-9
+    t = analysis.tail_stats(b)
+    assert t["es95"] >= t["var95"] > 0 and t["var99"] >= t["var95"]
+    px = pd.Series([10.0, 11.0, 12.0], index=pd.to_datetime(["2026-01-05", "2026-01-06", "2026-01-07"]))
+    assert analysis.earnings_reaction(px, "2026-01-06", "bmo") == pytest.approx(0.1)
+    assert analysis.earnings_reaction(px, "2026-01-06", "amc") == pytest.approx(12 / 11 - 1)

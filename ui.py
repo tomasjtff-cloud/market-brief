@@ -56,7 +56,7 @@ def P() -> dict:
 def _css(p: dict) -> str:
     return f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&display=swap');
 :root {{
   --paper:{p['paper']}; --surface:{p['surface']}; --raised:{p['raised']}; --ink:{p['ink']}; --body:{p['body']};
   --muted:{p['muted']}; --faint:{p['faint']}; --line:{p['line']}; --soft:{p['soft']}; --accent:{p['accent']};
@@ -64,6 +64,7 @@ def _css(p: dict) -> str:
   --calc:{p['calc']}; --calc-bg:{p['calc_bg']}; --ai:{p['ai']}; --ai-bg:{p['ai_bg']}; --rep:{p['rep']}; --rep-bg:{p['rep_bg']};
   --navy:{p['mast']}; --navy2:{p['mast2']}; --mast-line:{p['mast_line']}; --tape:{p['tape']};
   --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --serif: 'Spectral', Georgia, 'Times New Roman', serif;
 }}
 html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-serif; }}
 .stApp {{ font-feature-settings: "tnum" 1, "cv11" 1; }}
@@ -300,11 +301,6 @@ a.mb-card:hover {{ border-color: var(--faint); transform: translateY(-1px); }}
 .mb-move .amt {{ grid-column: 1 / -1; grid-row: 2; text-align: left; color: var(--muted) !important; font-weight: 400; font-size: 0.74rem; }}
 @media (max-width: 640px) {{ .mb-cmp .r {{ grid-template-columns: 1.3fr 0.8fr 0.8fr 0.9fr; }} }}
 
-/* ---------- research ---------- */
-.st-key-panel_rs_body h2, .st-key-panel_rs_preview h2 {{ font-size: 1.08rem !important; font-weight: 700; margin: 1rem 0 0.3rem !important; padding: 0 !important; }}
-.st-key-panel_rs_body h3, .st-key-panel_rs_preview h3 {{ font-size: 0.98rem !important; }}
-.st-key-panel_rs_body p, .st-key-panel_rs_body li {{ font-size: 0.92rem; line-height: 1.6; }}
-
 /* ---------- portfolio ---------- */
 .mb-tbl tr.hl td {{ background: var(--raised); }}
 .mb-check {{ display: flex; gap: 0.8rem; align-items: flex-start; padding: 0.55rem 0; border-bottom: 1px solid var(--soft); }}
@@ -380,6 +376,31 @@ a.mb-card:hover {{ border-color: var(--faint); transform: translateY(-1px); }}
 [data-testid="stCaptionContainer"] {{ color: var(--faint); }}
 [data-testid="stPlotlyChart"] {{ background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.3rem 0.3rem 0; }}
 [class*="st-key-panel_"] [data-testid="stPlotlyChart"], [class*="st-key-bare_"] [data-testid="stPlotlyChart"] {{ border: none; padding: 0; }}
+
+/* ---------- editorial type: serif headings, sans text, mono figures ---------- */
+.mb-ph h1 {{ font-family: var(--serif); font-weight: 500; font-size: 2.35rem; letter-spacing: -0.012em; line-height: 1.1; }}
+.mb-ph .sub {{ font-size: 0.9rem; max-width: 92ch; }}
+.mb-sec {{ font-family: var(--serif); font-weight: 500; font-size: 1.38rem; letter-spacing: -0.005em; margin: 1.6rem 0 0.7rem;
+  padding-bottom: 0.35rem; border-bottom: 1px solid var(--line); }}
+.mb-sec .mb-src, .mb-sec .mb-tagx {{ font-family: 'Inter', system-ui, sans-serif; }}
+.mb-h b {{ font-family: var(--serif); font-weight: 600; font-size: 1.08rem; letter-spacing: -0.005em; }}
+.mb-quote .co {{ font-family: var(--serif); font-weight: 500; font-size: 2.05rem; letter-spacing: -0.012em; }}
+.mb-story h3 {{ font-family: var(--serif); font-weight: 600 !important; font-size: 1.12rem !important; }}
+.mb-lead {{ font-family: var(--serif); font-size: 1.14rem; line-height: 1.6; }}
+.mb-logo {{ font-family: var(--serif); font-weight: 600; letter-spacing: -0.01em; }}
+.mb-callout {{ line-height: 1.6; }}
+.mb-tbl tr.grp td {{ color: var(--accent); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  padding-top: 0.85rem; border-bottom: 1px solid var(--line); background: transparent !important; }}
+.mb-ratios td.l {{ white-space: normal; }}
+.mb-earn {{ display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem; }}
+.mb-erow {{ display: grid; grid-template-columns: 4rem 5.4rem 1fr auto; gap: 0.6rem; align-items: center; padding: 0.42rem 0;
+  border-bottom: 1px solid var(--soft); font-size: 0.82rem; color: var(--body); }}
+.mb-erow:last-child {{ border-bottom: none; }}
+.mb-erow .d {{ color: var(--muted); font-size: 0.76rem; }}
+.mb-erow .v {{ font-family: var(--mono); font-size: 0.78rem; color: var(--ink); }}
+.mb-erow .mb-lean {{ font-size: 0.7rem; padding: 0.08rem 0.45rem; }}
+@media (max-width: 900px) {{ .mb-earn {{ grid-template-columns: 1fr; gap: 0.4rem; }} .mb-erow {{ grid-template-columns: 3.4rem 1fr auto; }}
+  .mb-erow .v {{ grid-column: 1 / -1; }} .mb-ph h1 {{ font-size: 1.85rem; }} .mb-quote .co {{ font-size: 1.6rem; }} }}
 </style>
 """
 

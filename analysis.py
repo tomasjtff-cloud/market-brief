@@ -340,3 +340,174 @@ def peer_implied(own: dict, peer_mets: list[dict], price: float) -> dict[str, di
             out[label] = {"median": med, "own": mine, "n": len(vals),
                           "implied": price * med / mine if mine else None}
     return out
+
+
+# --------------------------------------------------------------------------- financial statement analysis
+def _avg(s: pd.Series) -> pd.Series:
+    """Average of opening and closing balance (first year: closing balance only)."""
+    return ((s + s.shift(1)) / 2).fillna(s)
+
+
+def statement_analysis(f: dict, tax_default: float = 0.21) -> pd.DataFrame:
+    """Ratios by fiscal year from the 10-K lines: growth, margins, liquidity, leverage, activity, profitability (DuPont)
+    and earnings quality. Rows = ratio keys, columns = years. Missing inputs give NaN, never a guess."""
+    bal = f.get("balance") or {}
+    rev = f["revenue"]
+    years = sorted(set(rev.index))
+    if not years:
+        return pd.DataFrame()
+    idx = pd.Index(years)
+    g = lambda s: (s if isinstance(s, pd.Series) else pd.Series(dtype=float)).reindex(idx).astype(float)  # noqa: E731
+    revenue, ni, ebit, gp = g(rev), g(f["net_income"]), g(f["operating_income"]), g(f["gross_profit"])
+    ocf, fcf, da, sbc = g(f["ocf"]), g(f["fcf"]), g(f.get("depreciation")), g(f.get("stock_comp"))
+    interest = g(f.get("interest")).abs()
+    assets, ca, cl = g(bal.get("assets")), g(bal.get("assets_current")), g(bal.get("liabilities_current"))
+    inv, recv, eq = g(bal.get("inventory")), g(bal.get("receivables")), g(bal.get("equity"))
+    cash, debt = g(bal.get("cash")), g(bal.get("debt"))
+    ebitda = ebit + da
+    cogs = revenue - gp
+    nz = lambda s: s.where(s.abs() > 1e-9)  # noqa: E731
+    rows = {
+        "revenue_growth": revenue.pct_change(fill_method=None),
+        "net_income_growth": ni.pct_change(fill_method=None).where(ni.shift(1) > 0),
+        "gross_margin": gp / nz(revenue),
+        "ebitda_margin": ebitda / nz(revenue),
+        "operating_margin": ebit / nz(revenue),
+        "net_margin": ni / nz(revenue),
+        "fcf_margin": fcf / nz(revenue),
+        "sbc_revenue": sbc / nz(revenue),
+        "current_ratio": ca / nz(cl),
+        "quick_ratio": (ca - inv.fillna(0)) / nz(cl),
+        "debt_equity": debt.fillna(0) / nz(eq).where(eq > 0),
+        "net_debt_ebitda": (debt.fillna(0) - cash) / nz(ebitda).where(ebitda > 0),
+        "interest_coverage": ebit / nz(interest),
+        "asset_turnover": revenue / nz(_avg(assets)),
+        "dso": _avg(recv) / nz(revenue) * 365,
+        "dio": _avg(inv) / nz(cogs).where(cogs > 0) * 365,
+        "roa": ni / nz(_avg(assets)),
+        "roe": ni / nz(_avg(eq)).where(_avg(eq) > 0),
+        "equity_multiplier": _avg(assets) / nz(_avg(eq)).where(_avg(eq) > 0),
+        "cash_conversion": ocf / nz(ni).where(ni > 0),
+        "accruals": (ni - ocf) / nz(_avg(assets)),
+        "receivables_vs_sales": recv.pct_change(fill_method=None) - revenue.pct_change(fill_method=None),
+    }
+    return pd.DataFrame(rows).T
+
+
+def tax_rate(f: dict, default: float = 0.21) -> float:
+    """Effective tax rate of the latest year, kept between 0 and 35%; the statutory 21% when it can't be measured."""
+    tax, pre = f.get("income_tax"), f.get("pretax_income")
+    if isinstance(tax, pd.Series) and isinstance(pre, pd.Series) and not tax.empty and not pre.empty:
+        y = tax.index.intersection(pre.index)
+        if len(y) and pre[y[-1]] > 0:
+            r = float(tax[y[-1]] / pre[y[-1]])
+            if 0 <= r <= 0.35:
+                return r
+    return default
+
+
+def eva(f: dict, wacc_: float, tax: float | None = None) -> pd.DataFrame:
+    """Economic value added by year: NOPAT − WACC × capital employed, with capital employed = debt + equity (average)."""
+    bal = f.get("balance") or {}
+    ebit = f["operating_income"]
+    if ebit.empty or bal.get("equity") is None or bal["equity"].empty:
+        return pd.DataFrame()
+    tax = tax_rate(f) if tax is None else tax
+    years = sorted(set(ebit.index) & set(bal["equity"].index))
+    idx = pd.Index(years)
+    eq = bal["equity"].reindex(idx)
+    debt = (bal.get("debt") if bal.get("debt") is not None else pd.Series(dtype=float)).reindex(idx).fillna(0.0)
+    cap = _avg(eq + debt)
+    nopat = ebit.reindex(idx) * (1 - tax)
+    out = pd.DataFrame({"nopat": nopat, "capital": cap, "roic": nopat / cap.where(cap > 0)})
+    out["spread"] = out["roic"] - wacc_
+    out["eva"] = nopat - wacc_ * cap
+    return out
+
+
+def health_checks(ratios: pd.DataFrame) -> list[tuple[str, str, dict]]:
+    """Plain-language flags on the latest year: (level, message key, values). level is good / watch / bad."""
+    if ratios.empty:
+        return []
+    last = ratios.iloc[:, -1]
+    prev = ratios.iloc[:, -2] if ratios.shape[1] > 1 else None
+    v = lambda k: float(last[k]) if k in last and pd.notna(last[k]) else None  # noqa: E731
+    out = []
+    cc = v("cash_conversion")
+    if cc is not None:
+        out.append(("good" if cc >= 1 else "watch" if cc >= 0.8 else "bad",
+                    "Operating cash flow is {x} net income." if cc >= 1 else "Operating cash flow is only {x} net income: check what is not turning into cash.",
+                    {"x": f"{cc:.1f}x"}))
+    dso = v("dso")
+    if dso is not None and prev is not None and pd.notna(prev.get("dso")):
+        p = float(prev["dso"])
+        out.append(("bad" if dso > p * 1.15 else "good",
+                    "Customers take {d} days to pay, up from {p}: receivables are growing faster than sales." if dso > p * 1.15
+                    else "Customers take {d} days to pay ({p} the year before): receivables are in line with sales.",
+                    {"d": f"{dso:.0f}", "p": f"{p:.0f}"}))
+    ic = v("interest_coverage")
+    if ic is not None:
+        out.append(("good" if ic >= 5 else "watch" if ic >= 2 else "bad",
+                    "Operating profit covers interest {x} times." if ic >= 2 else "Operating profit covers interest only {x} times (below 2x is a serious concern).",
+                    {"x": f"{ic:.1f}"}))
+    cr = v("current_ratio")
+    if cr is not None:
+        out.append(("good" if cr >= 1.2 else "watch" if cr >= 0.9 else "bad",
+                    "Current ratio of {x}: short-term assets cover short-term obligations." if cr >= 1.2
+                    else "Current ratio of {x}: short-term assets barely cover short-term obligations.", {"x": f"{cr:.2f}x"}))
+    nd = v("net_debt_ebitda")
+    if nd is not None:
+        out.append(("good" if nd <= 2 else "watch" if nd <= 3.5 else "bad",
+                    "Net debt is {x} EBITDA." if nd > 0 else "More cash than debt (net debt {x} EBITDA).", {"x": f"{nd:.1f}x"}))
+    sbc = v("sbc_revenue")
+    if sbc is not None and sbc >= 0.08:
+        out.append(("watch", "Stock compensation is {x} of revenue, so free cash flow overstates what owners earn.", {"x": f"{sbc * 100:.0f}%"}))
+    return out
+
+
+# --------------------------------------------------------------------------- relative performance and tails
+def capture_alpha(close: pd.Series, bench: pd.Series, rf: float, weeks: int = 104) -> dict:
+    """Up/down capture (weekly, two years) and Jensen's alpha (one year, daily, annualised)."""
+    wk = pd.DataFrame({"s": close, "b": bench}).dropna().resample("W-FRI").last().pct_change().dropna().iloc[-weeks:]
+    up, down = wk[wk["b"] > 0], wk[wk["b"] < 0]
+    cap = lambda d: float((1 + d["s"]).prod() ** (1 / len(d)) - 1) / float((1 + d["b"]).prod() ** (1 / len(d)) - 1) if len(d) > 4 else None  # noqa: E731
+    d = pd.DataFrame({"s": close, "b": bench}).dropna().pct_change().dropna().iloc[-TRADING_DAYS:]
+    alpha = None
+    if len(d) > 60 and d["b"].var() > 0:
+        b = float(d.cov().iloc[0, 1] / d["b"].var())
+        rs = float((1 + d["s"]).prod() ** (TRADING_DAYS / len(d)) - 1)
+        rb = float((1 + d["b"]).prod() ** (TRADING_DAYS / len(d)) - 1)
+        alpha = rs - (rf + b * (rb - rf))
+    return {"up_capture": cap(up), "down_capture": cap(down), "alpha": alpha}
+
+
+def tail_stats(close: pd.Series, days: int = 2 * TRADING_DAYS) -> dict | None:
+    """Historical 1-day VaR / expected shortfall at 95% and 99% vs what a normal distribution says, skew and excess kurtosis."""
+    r = close.pct_change().dropna().iloc[-days:]
+    if len(r) < 120:
+        return None
+    mu, sd = float(r.mean()), float(r.std())
+    out = {"skew": float(r.skew()), "kurt": float(r.kurt()), "days": len(r)}
+    for lvl, z in ((95, 1.6449), (99, 2.3263)):
+        q = float(r.quantile(1 - lvl / 100))
+        out[f"var{lvl}"] = -q
+        out[f"es{lvl}"] = -float(r[r <= q].mean())
+        out[f"var{lvl}_normal"] = -(mu - z * sd)
+    return out
+
+
+# --------------------------------------------------------------------------- earnings
+def earnings_reaction(close: pd.Series, date: str, hour: str) -> float | None:
+    """Stock move on the first session that could react to the report: the report day for reports before the open,
+    the next day otherwise (close to close)."""
+    d = pd.Timestamp(date)
+    s = close.dropna()
+    if hour == "bmo":
+        after = s[s.index >= d]
+        before = s[s.index < d]
+    else:
+        after = s[s.index > d]
+        before = s[s.index <= d]
+    if after.empty or before.empty or (after.index[0] - d).days > 5:
+        return None
+    return float(after.iloc[0] / before.iloc[-1] - 1)

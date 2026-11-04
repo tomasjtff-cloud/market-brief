@@ -122,6 +122,45 @@ def watch_rail(wl: list[str]) -> None:
     st.html(html_)
 
 
+def earnings_board(wl: list[str]) -> str:
+    """Results this week for the watchlist and the largest US companies: who beat, who missed, who reports next."""
+    cal = safe(data.earnings_calendar, 7, 7, default=[]) or []
+    if not cal:
+        return ""
+    names = list(dict.fromkeys(wl + [t for t, _ in data.MEGA_CAPS]))
+    mine = [r for r in cal if r["symbol"] in names]
+    today = dt.date.today().isoformat()
+    done = sorted([r for r in mine if r["date"] <= today and r.get("eps_actual") is not None], key=lambda r: r["date"], reverse=True)
+    soon = sorted([r for r in mine if r["date"] >= today and r.get("eps_actual") is None], key=lambda r: r["date"])
+    n_total = len({r["symbol"] for r in cal if r["date"] >= today})
+
+    def line(r: dict, reported: bool) -> str:
+        d = D(dt.date.fromisoformat(r["date"]), "%a %-d")
+        hour = {"bmo": T("before open"), "amc": T("after close")}.get(r.get("hour") or "", "")
+        tk = f'<a href="{link({"p": "stock", "t": r["symbol"]})}" target="_self"><b>{esc(r["symbol"])}</b></a>'
+        if reported:
+            ea, ee = r.get("eps_actual"), r.get("eps_estimate")
+            badge = ""
+            if isnum(ea) and isnum(ee):
+                badge = f'<span class="mb-lean {"up" if ea > ee else "down" if ea < ee else "hold"}">{T("Beat") if ea > ee else T("Missed") if ea < ee else T("In line")}</span>'
+            ra, re_ = r.get("rev_actual"), r.get("rev_estimate")
+            rev = f' · {T("revenue")} {money(ra, 1)} {T("vs")} {money(re_, 1)}' if isnum(ra) and isnum(re_) else ""
+            return (f'<div class="mb-erow">{tk}<span class="d">{d}</span><span class="v num">EPS ${ea:,.2f} {T("vs")} '
+                    f'{f"${ee:,.2f}" if isnum(ee) else "n/a"}{rev}</span>{badge}</div>')
+        est = f'EPS {T("est.")} ${r["eps_estimate"]:,.2f}' if isnum(r.get("eps_estimate")) else ""
+        return f'<div class="mb-erow">{tk}<span class="d">{d}{" · " + hour if hour else ""}</span><span class="v num">{est}</span></div>'
+
+    if not done and not soon:
+        return ""
+    cols = ""
+    if done:
+        cols += f'<div><div class="mb-sub">{T("Reported")}</div>' + "".join(line(r, True) for r in done[:8]) + "</div>"
+    if soon:
+        cols += f'<div><div class="mb-sub">{T("Coming up")}</div>' + "".join(line(r, False) for r in soon[:8]) + "</div>"
+    return (f'<div class="mb-sec">{T("Earnings this week")} {src("rep")} {src("ana")}</div><div class="mb-panel mb-earn">{cols}</div>'
+            '<p class="mb-foot">' + T("Your watchlist and the largest US companies. {n} US companies report in the next seven days. Open a stock and its Earnings tab for the full record.", n=n_total) + "</p>")
+
+
 def story_html(s: dict, top: bool = False) -> str:
     sources = "".join(
         f'<a class="mb-src" href="{esc(h["url"])}" target="_blank" rel="noopener">{esc(h["source"])}, {D(h["time"], "%b %d %-I:%M %p")}</a>'
@@ -175,6 +214,9 @@ def page_markets(wl: list[str]) -> None:
         snapshot += latam_text
         st.html(f'<div class="mb-sec">{T("Mexico and Argentina")} {src("mkt")}</div>{board}'
                 f'<p class="mb-foot">{T("Country stock markets through the US-listed ETFs that track them (EWW, ARGT). Argentine dollar rates from DolarApi.")}</p>')
+        eb = earnings_board(wl)
+        if eb:
+            st.html(eb)
 
     headlines, failed = data.todays_headlines()
     st.html(f'<div class="mb-sec">{T("The morning note")} {src("ai")}</div>')
@@ -376,15 +418,20 @@ def page_compare(wl: list[str]) -> None:
         b = None
         if bench is not None and name != BENCHMARK and name in closes:
             b = analysis.beta(closes[name], bench)
+        cap = analysis.capture_alpha(closes[name], bench, rf) if bench is not None and name != BENCHMARK and name in closes else {}
         q = safe(data.quote, name) if name in closes else None
         price_txt = f"${q['price']:,.2f}" if q else ""
         rows.append(f'<tr><td class="l"><b>{esc(name)}</b></td><td class="num">{price_txt}</td>'
                     f'<td class="num {signed_class(total)}">{pct(total)}</td><td class="num">{pct(ann) if ann is not None else "n/a"}</td>'
                     f'<td class="num">{pct(vol, signed=False) if vol else "n/a"}</td><td class="num">{num(sharpe)}</td>'
-                    f'<td class="num neg">{pct(dd)}</td><td class="num">{num(b)}</td></tr>')
-    head = "".join(f"<th>{T(h)}</th>" for h in ("Price", "Return", "Annualized", "Volatility", "Sharpe", "Max drawdown", "Beta vs SPY"))
+                    f'<td class="num neg">{pct(dd)}</td><td class="num">{num(b)}</td>'
+                    f'<td class="num">{pct(cap.get("up_capture"), 0, False) if cap.get("up_capture") is not None else ""}</td>'
+                    f'<td class="num">{pct(cap.get("down_capture"), 0, False) if cap.get("down_capture") is not None else ""}</td>'
+                    f'<td class="num {signed_class(cap.get("alpha"))}">{pct(cap.get("alpha"), 1) if cap.get("alpha") is not None else ""}</td></tr>')
+    head = "".join(f"<th>{T(h)}</th>" for h in ("Price", "Return", "Annualized", "Volatility", "Sharpe", "Max drawdown", "Beta vs SPY",
+                                                  "Up capture", "Down capture", "Alpha (1Y)"))
     st.html(f'<div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">{T("Series")}</th>{head}</tr>{"".join(rows)}</table></div>'
-            f'<p class="mb-foot">{T("Over the selected period. Sharpe uses the 10-year Treasury as the risk-free rate; beta uses two years of weekly returns. The equal-weight portfolio holds the chosen stocks (not SPY) in equal parts, rebalanced daily.")}</p>')
+            + '<p class="mb-foot">' + T("Over the selected period. Sharpe uses the 10-year Treasury as the risk-free rate; beta uses two years of weekly returns. The equal-weight portfolio holds the chosen stocks (not SPY) in equal parts, rebalanced daily. Up / down capture: how much of the S&P 500's rising and falling weeks the stock captured over two years (above 100% up and below 100% down is the ideal). Alpha: Jensen's alpha over one year, the return beyond what beta and the market explain.") + "</p>")
 
     if len(df.columns) >= 2:
         a, b = st.columns([1.2, 1], gap="medium")
@@ -406,6 +453,20 @@ def page_method() -> None:
         st.markdown(METHOD_ES)
     else:
         st.markdown(METHOD_EN)
+    st.html(f'<div class="mb-sec">{T("Data health")} <span class="mb-tagx">{T("checks each source live")}</span></div>')
+    if st.button(T("Run the check"), key="health_run"):
+        with st.spinner(T("Calling every source once…")):
+            st.session_state.health = data.health_check()
+    res = st.session_state.get("health")
+    if res:
+        body = "".join(
+            f'<tr><td class="l"><b>{esc(r["source"])}</b><span class="co">{esc(T(r["use"]))}</span></td>'
+            f'<td><span class="mb-lean {"up" if r["ok"] else "down"}">{T("Working") if r["ok"] else T("Not answering")}</span></td>'
+            f'<td class="num">{r["ms"]:,} ms</td><td class="l" style="white-space:normal">{esc(r["detail"])}</td></tr>' for r in res)
+        n_ok = sum(r["ok"] for r in res)
+        st.html(f'<div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">{T("Source")}</th><th>{T("Status")}</th><th>{T("Time")}</th>'
+                f'<th class="l">{T("Answer")}</th></tr>{body}</table></div><p class="mb-foot">'
+                + T("{a} of {b} sources answered. A source that fails here shows a notice on its page, and the rest of the app keeps working.", a=n_ok, b=len(res)) + "</p>")
 
 
 METHOD_EN = """
@@ -469,11 +530,40 @@ single-company weight and cash plus bonds. The optimiser is long-only Markowitz 
 shrinkage of the covariance: minimum variance, maximum Sharpe and the highest-return portfolio within the profile's
 volatility. Recommendation signals come from these numbers; the AI only explains them, and the app never trades.
 
-#### Comparable companies and research
+#### Comparable companies
 Peers are the companies Finnhub groups in the same industry. For each multiple (P/E, EV/EBITDA, P/S, P/FCF, P/B, trailing
 twelve months) the app takes the peer median and the value it implies: today's price × peer median ÷ the company's own
-multiple; negative multiples are left out. The Research page publishes pitches kept as files in the repository and measures
-each call from its publication date against the S&P 500 (sign flipped for short calls).
+multiple; negative multiples are left out.
+
+#### Financial statement analysis and EVA
+From the 10-K, by fiscal year: horizontal analysis (growth), vertical analysis (margins as % of revenue), liquidity (current and
+quick ratios), leverage (debt / equity, net debt / EBITDA, interest coverage), activity (asset turnover, days sales outstanding,
+days inventory), profitability (ROA, ROE on average balances) and the DuPont split ROE = net margin × asset turnover × equity
+multiplier. Earnings-quality checks compare operating cash flow with net income, receivables with sales, and flag heavy stock
+compensation. Economic value added = NOPAT − WACC × capital employed, with NOPAT = operating income × (1 − effective tax rate,
+21% if it can't be measured) and capital employed = debt + equity, averaged over the year; WACC is the one set in Valuation.
+
+#### Earnings
+EPS reported vs the analysts' consensus for the last quarters (Finnhub earnings surprises), report dates with revenue actual vs
+estimate (Finnhub earnings calendar), and the stock's close-to-close move on the first session after each report. Quarterly
+revenue and margins come from the 10-Q filings; the fourth fiscal quarter has no 10-Q, so it is the year (10-K) minus the first
+three quarters.
+
+#### Tail risk, capture and alpha
+Historical one-day VaR (the loss exceeded on 5% or 1% of days) and expected shortfall (the average loss beyond it) from two years
+of real daily returns, next to what a normal distribution would give, with skewness and excess kurtosis. Up and down capture use
+two years of weekly returns against SPY; alpha is Jensen's alpha over one year.
+
+#### Performance attribution
+Each day, every position's contribution is its weight at the previous close times its price return, plus dividends; trades at
+prices other than that day's close and fees go to "trading and fees". Against the S&P 500 (SPY, price only) the difference splits
+exactly into sector bets Σ w × (sector ETF − SPY), stock selection Σ w × (stock − its sector ETF), cash −w_cash × SPY, and trading.
+Sectors follow the stock's industry mapped to the SPDR sector ETFs; an ETF you hold is its own benchmark. Daily effects are linked
+over the period with the Carino method so they add up to the period's return.
+
+#### PDF reports
+The stock and portfolio reports are built on demand from the same numbers shown in the app (and the AI text only if you already
+generated it), with the source of each block. Nothing is stored.
 
 #### Limits
 Free data can be delayed or briefly unavailable; every number shows its time. SEC tag coverage varies by company. Nothing here

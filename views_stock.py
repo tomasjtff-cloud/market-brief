@@ -21,7 +21,18 @@ from common import (BENCHMARK, MAX_WATCHLIST, add_to_watchlist, big, get_watchli
 from i18n import D, T, choice, lang
 from ui import P, chip, esc, link, sgn, signed_class, src
 
-SECTIONS = ["Summary", "Chart", "Financials", "Valuation", "Outlook", "Compare", "News", "Analysts & AI take"]
+from reportlab.lib.colors import HexColor as _Hex  # noqa: E402
+
+UP_C, DOWN_C, AMBER_C = _Hex("#0E9F6E"), _Hex("#D64545"), _Hex("#C98A00")
+
+
+def tone(x):
+    """Report colour for a signed number (None keeps the default ink)."""
+    if x is None or not isnum(x):
+        return None
+    return UP_C if x > 0 else DOWN_C if x < 0 else None
+
+SECTIONS = ["Summary", "Chart", "Financials", "Earnings", "Valuation", "Outlook", "Compare", "News", "Analysts & AI take"]
 RANGES = ["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y"]
 
 
@@ -118,6 +129,7 @@ def page_stock(wl: list[str]) -> None:
         f'<div><span class="px num">{q["price"]:,.2f}</span><span class="chg num {cls}">{sgn(q["change"] or 0, 2, "")} ({sgn(q["pct"] or 0)})</span>'
         f'<div class="asof">{state} · {when(q["time"])} {src("mkt")}</div></div></div>')
     with head_r:
+        pdf_slot = st.container()
         if t in wl:
             st.button(T("✓ In watchlist"), key=f"wl_rm_{t}", on_click=remove_from_watchlist, args=(t,), width="stretch",
                       help=T("Click to remove from the watchlist"), disabled=len(wl) == 1)
@@ -141,12 +153,14 @@ def page_stock(wl: list[str]) -> None:
     section = choice(st.segmented_control, "Section", SECTIONS, key=f"sec_{t}", default="Summary",
                      label_visibility="collapsed") or "Summary"
     st.html('<div style="height:.2rem"></div>')
-    hp.show({"Summary": "stock_summary", "Chart": "stock_chart", "Financials": "stock_financials", "Valuation": "stock_valuation",
+    hp.show({"Summary": "stock_summary", "Chart": "stock_chart", "Financials": "stock_financials", "Earnings": "stock_earnings", "Valuation": "stock_valuation",
              "Outlook": "stock_outlook", "Compare": "stock_compare", "News": "stock_news",
              "Analysts & AI take": "stock_analysts"}.get(section, ""))
     ctx = {"t": t, "q": q, "p": p, "hist": hist, "bench": bench, "rf": rf, "rf_label": rf_label, "m": m, "met": met,
            "high52": high52, "low52": low52, "wl": wl}
-    {"Summary": summary, "Chart": chart_section, "Financials": financials, "Valuation": valuation, "Outlook": outlook,
+    with pdf_slot:
+        pdf_controls(ctx)
+    {"Summary": summary, "Chart": chart_section, "Financials": financials, "Earnings": earnings, "Valuation": valuation, "Outlook": outlook,
      "Compare": compare, "News": news, "Analysts & AI take": analysts_section}[section](ctx)
 
 
@@ -250,6 +264,19 @@ def chart_section(c: dict) -> None:
     with b:
         st.html(f'<div class="mb-sec">{T("Drawdown, last year")} {src("calc")}</div>')
         st.plotly_chart(charts.drawdown(hist["close"]), config=charts.CONFIG, key=f"dd_{t}")
+    tail = analysis.tail_stats(hist["close"])
+    if tail:
+        st.html(f'<div class="mb-sec">{T("Tail risk: bad days")} {src("calc")}</div>')
+        rows = "".join(
+            f'<tr><td class="l">{T(lbl)}</td><td class="num neg">{pct(-tail[f"var{lv}"], 2)}</td><td class="num neg">{pct(-tail[f"es{lv}"], 2)}</td>'
+            f'<td class="num">{pct(-tail[f"var{lv}_normal"], 2)}</td></tr>' for lv, lbl in ((95, "1 day in 20"), (99, "1 day in 100")))
+        fat = tail[f"var99"] > tail["var99_normal"] * 1.1
+        st.html(f'<div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">{T("How often")}</th><th>{T("Loss at least (VaR)")}</th>'
+                f'<th>{T("Average loss on those days (expected shortfall)")}</th><th>{T("A normal bell curve would say")}</th></tr>{rows}</table></div>'
+                '<p class="mb-foot">' + T("From {d} real daily returns. Skewness {sk}, excess kurtosis {ku}. {fat}", d=tail["days"],
+                                           sk=f'{tail["skew"]:.2f}', ku=f'{tail["kurt"]:.1f}',
+                                           fat=T("Bad days are worse than the bell curve suggests (fat tails).") if fat
+                                           else T("Bad days are close to what the bell curve suggests.")) + "</p>")
 
 
 def stats_row(items: list[tuple[str, str, str]]) -> str:
@@ -307,6 +334,220 @@ def financials(c: dict) -> None:
         st.plotly_chart(charts.margin_lines(years, [(T("Gross"), mg(f["gross_profit"]), "accent"), (T("Operating"), mg(f["operating_income"]), "violet"),
                                                     (T("Net"), mg(f["net_income"]), "teal"), ("FCF", mg(f["fcf"]), "orange")]),
                         config=charts.CONFIG, key=f"mg_{t}_{lang()}")
+    statement_block(c, f)
+
+
+def wacc_for(c: dict, f: dict) -> tuple[float, str]:
+    """The WACC set in the Valuation tab, or the same default it starts from."""
+    val = st.session_state.get(f"val_{c['t']}") or {}
+    if val.get("discount"):
+        return float(val["discount"]), T("from your Valuation assumptions")
+    beta_ = float(np.clip(c["m"]["beta"], 0.5, 2.5)) if c["m"].get("beta") else 1.0
+    mcap = c["q"]["price"] * (f.get("shares") or 0)
+    w = analysis.wacc(c["rf"], beta_, 0.05, c["rf"] + 0.015, analysis.tax_rate(f), mcap, f.get("debt") or 0.0)
+    return float(w["wacc"]), T("default: CAPM with a 5% equity premium, as in Valuation")
+
+
+RATIO_ROWS = [  # (group, key, label, kind) — kind: pct, x, days, growth
+    ("Growth (horizontal analysis)", "revenue_growth", "Revenue growth", "growth"),
+    ("Growth (horizontal analysis)", "net_income_growth", "Net income growth", "growth"),
+    ("Margins (vertical analysis, % of revenue)", "gross_margin", "Gross margin", "pct"),
+    ("Margins (vertical analysis, % of revenue)", "ebitda_margin", "EBITDA margin", "pct"),
+    ("Margins (vertical analysis, % of revenue)", "operating_margin", "Operating margin", "pct"),
+    ("Margins (vertical analysis, % of revenue)", "net_margin", "Net margin", "pct"),
+    ("Margins (vertical analysis, % of revenue)", "fcf_margin", "FCF margin", "pct"),
+    ("Margins (vertical analysis, % of revenue)", "sbc_revenue", "Stock compensation, % of revenue", "pct"),
+    ("Liquidity", "current_ratio", "Current ratio", "x"),
+    ("Liquidity", "quick_ratio", "Quick ratio", "x"),
+    ("Leverage", "debt_equity", "Debt / equity", "x"),
+    ("Leverage", "net_debt_ebitda", "Net debt / EBITDA", "x"),
+    ("Leverage", "interest_coverage", "Interest coverage (EBIT / interest)", "x"),
+    ("Activity", "asset_turnover", "Asset turnover", "x"),
+    ("Activity", "dso", "Days sales outstanding", "days"),
+    ("Activity", "dio", "Days inventory", "days"),
+    ("Profitability and DuPont", "roa", "Return on assets (ROA)", "pct"),
+    ("Profitability and DuPont", "roe", "Return on equity (ROE)", "pct"),
+    ("Profitability and DuPont", "net_margin", "× Net margin", "pct"),
+    ("Profitability and DuPont", "asset_turnover", "× Asset turnover", "x"),
+    ("Profitability and DuPont", "equity_multiplier", "× Equity multiplier", "x"),
+    ("Earnings quality", "cash_conversion", "Cash conversion (operating cash flow / net income)", "x"),
+    ("Earnings quality", "accruals", "Accruals ratio ((net income − operating cash flow) / assets)", "growth"),
+    ("Earnings quality", "receivables_vs_sales", "Receivables growth − revenue growth", "growth"),
+]
+
+
+def fmt_ratio(v, kind: str) -> str:
+    if not isnum(v) or np.isinf(v):
+        return "n/a"
+    if kind == "x":
+        return f"{v:,.2f}x"
+    if kind == "days":
+        return f"{v:,.0f}"
+    return pct(v, 1, kind == "growth")
+
+
+def statement_block(c: dict, f: dict) -> None:
+    t = c["t"]
+    ratios = analysis.statement_analysis(f)
+    if ratios.empty or not (f.get("balance") or {}).get("assets") is not None:
+        return
+    years = list(ratios.columns)[-5:]
+    wacc_v, wacc_src = wacc_for(c, f)
+    left, right = st.columns([1, 1.25], gap="medium")
+    with left:
+        st.html(f'<div class="mb-sec">{T("Health checks")} <span class="mb-tagx">{T("latest fiscal year")}</span> {src("calc")}</div>')
+        checks = analysis.health_checks(ratios[years])
+        icon = {"good": ("up", "✓"), "watch": ("hold", "!"), "bad": ("down", "✕")}
+        st.html('<div class="mb-panel">' + ("".join(
+            f'<div class="mb-check"><span class="mb-lean {icon[lv][0]}">{icon[lv][1]}</span><div class="mb-p" style="margin:0">{esc(T(msg, **kw))}</div></div>'
+            for lv, msg, kw in checks) or f'<p class="mb-p">{T("Not enough balance-sheet data for the checks.")}</p>') + "</div>")
+    with right:
+        e = analysis.eva(f, wacc_v)
+        st.html(f'<div class="mb-sec">{T("Economic value added")} {src("calc")}</div>')
+        if e.empty or e["eva"].dropna().empty:
+            st.caption(T("EVA needs equity and operating profit from the 10-K; not available here."))
+        else:
+            last = e.dropna(subset=["eva"]).iloc[-1]
+            yr = e.dropna(subset=["eva"]).index[-1]
+            st.html(stats_row([("NOPAT", money(last["nopat"], 1), ""), ("Capital employed", money(last["capital"], 1), ""),
+                               ("ROIC", pct(last["roic"], 1, False), ""), ("WACC", pct(wacc_v, 1, False), ""),
+                               ("EVA", money(last["eva"], 1), signed_class(last["eva"]))]))
+            st.html('<p class="mb-foot">' + T("FY{y}. NOPAT = operating income × (1 − {tax} tax); capital employed = debt + equity, average of the year; WACC {w}, {src}. {verdict}",
+                                               y=yr, tax=pct(analysis.tax_rate(f), 0, False), w=pct(wacc_v, 1, False), src=wacc_src,
+                                               verdict=T("Return on capital beats its cost: the company creates value.") if last["eva"] > 0
+                                               else T("Return on capital is below its cost: the company destroys value at this WACC.")) + "</p>")
+            ey = [y for y in e.index if pd.notna(e.at[y, "eva"])][-6:]
+            st.plotly_chart(charts.financial_bars(ey, [(T("EVA"), [e.at[y, "eva"] / 1e9 for y in ey], "teal")], height=220),
+                            config=charts.CONFIG, key=f"eva_{t}_{lang()}")
+    body, group = "", None
+    for grp, key, label, kind in RATIO_ROWS:
+        if key not in ratios.index or ratios.loc[key, years].isna().all():
+            continue
+        if grp != group:
+            body += f'<tr class="grp"><td class="l" colspan="{len(years) + 1}">{T(grp)}</td></tr>'
+            group = grp
+        body += f'<tr><td class="l">{T(label)}</td>' + "".join(
+            f'<td class="num {signed_class(ratios.at[key, y]) if kind == "growth" and isnum(ratios.at[key, y]) else ""}">{fmt_ratio(ratios.at[key, y], kind)}</td>'
+            for y in years) + "</tr>"
+    st.html(f'<div class="mb-sec">{T("Statement analysis")} <span class="mb-tagx">{T("fiscal years · SEC 10-K")}</span> {src("calc")}</div>'
+            f'<div class="mb-scroll"><table class="mb-tbl mb-ratios"><tr><th class="l"></th>{"".join(f"<th>FY{y}</th>" for y in years)}</tr>{body}</table></div>'
+            '<p class="mb-foot">' + T("Balance-sheet ratios use the average of the opening and closing balance. DuPont splits ROE into net margin × asset turnover × equity multiplier, so you can see whether returns come from pricing power, efficiency or debt. n/a = the company doesn't report that line in a comparable way.") + "</p>")
+
+
+# =========================================================================== Earnings
+def _q_label(end: str) -> str:
+    try:
+        return D(dt.date.fromisoformat(end[:10]), "%b %Y")
+    except Exception:
+        return end
+
+
+def earnings(c: dict) -> None:
+    t, hist = c["t"], c["hist"]
+    with st.spinner(T("Loading earnings…")):
+        surprises = safe(data.earnings_surprises, t, default=[]) or []
+        cal = safe(data.earnings_history, t, default=[]) or []
+        f = safe(data.company_fundamentals, t)
+    today = dt.date.today().isoformat()
+    past = [r for r in cal if r["date"] <= today and (r.get("eps_actual") is not None or r.get("rev_actual") is not None)]
+    nxt = next((r for r in cal if r["date"] >= today and r.get("eps_actual") is None), None)
+    # merge EPS surprises (by fiscal year and quarter) with report dates and revenue
+    rows: dict[tuple, dict] = {}
+    for r in surprises:
+        rows[(r.get("year"), r.get("quarter"))] = {"period": r["period"], "eps_actual": r["actual"], "eps_estimate": r.get("estimate"),
+                                                    "surprise_pct": r.get("surprise_pct")}
+    for r in past:
+        k = (r.get("year"), r.get("quarter"))
+        row = rows.setdefault(k, {"period": None, "eps_actual": r.get("eps_actual"), "eps_estimate": r.get("eps_estimate"), "surprise_pct": None})
+        row.update({"date": r["date"], "hour": r.get("hour"), "rev_actual": r.get("rev_actual"), "rev_estimate": r.get("rev_estimate")})
+        if row.get("eps_actual") is None:
+            row["eps_actual"], row["eps_estimate"] = r.get("eps_actual"), r.get("eps_estimate")
+    items = sorted(rows.items(), key=lambda kv: (kv[0][0] or 0, kv[0][1] or 0))[-8:]
+    for _, r in items:
+        if r.get("surprise_pct") is None and isnum(r.get("eps_actual")) and isnum(r.get("eps_estimate")) and r["eps_estimate"]:
+            r["surprise_pct"] = (r["eps_actual"] - r["eps_estimate"]) / abs(r["eps_estimate"]) * 100
+        r["reaction"] = analysis.earnings_reaction(hist["close"], r["date"], r.get("hour") or "") if r.get("date") else None
+    if not items and not nxt:
+        st.info(T("No earnings data for {t} (ETFs and funds don't report earnings).", t=t))
+    else:
+        beats = [r for _, r in items if isnum(r.get("eps_actual")) and isnum(r.get("eps_estimate"))]
+        n_beat = sum(1 for r in beats if r["eps_actual"] > r["eps_estimate"])
+        sur = [r["surprise_pct"] for r in beats if isnum(r.get("surprise_pct"))]
+        moves = [r["reaction"] for _, r in items if r.get("reaction") is not None]
+        nxt_txt = "n/a"
+        if nxt:
+            timing = {"bmo": T("before the open"), "amc": T("after the close")}.get(nxt.get("hour") or "", "")
+            nxt_txt = D(dt.date.fromisoformat(nxt["date"]), "%b %-d") + (f" · {timing}" if timing else "")
+        st.html(stats_row([
+            ("Next report", nxt_txt, ""),
+            ("EPS estimate", f'${nxt["eps_estimate"]:,.2f}' if nxt and isnum(nxt.get("eps_estimate")) else "n/a", ""),
+            ("Revenue estimate", money(nxt.get("rev_estimate"), 2) if nxt else "n/a", ""),
+            ("Beat EPS estimates", T("{a} of {b}", a=n_beat, b=len(beats)) if beats else "n/a", ""),
+            ("Average EPS surprise", sgn(float(np.mean(sur)), 1) if sur else "n/a", signed_class(float(np.mean(sur))) if sur else ""),
+            ("Average move on results", sgn(float(np.mean(np.abs(moves))) * 100, 1).replace("+", "±") if moves else "n/a", ""),
+        ]))
+        a, b = st.columns([1.15, 1], gap="medium")
+        with a:
+            st.html(f'<div class="mb-sec">{T("EPS: reported vs expected")} {src("rep")} {src("ana")}</div>')
+            pts = [(r.get("period") or r.get("date") or "", r.get("eps_estimate"), r.get("eps_actual")) for _, r in items if isnum(r.get("eps_actual"))]
+            if pts:
+                labels = [_q_label(x[0]) for x in pts]
+                if nxt and isnum(nxt.get("eps_estimate")):
+                    labels.append(T("Next") + " · " + D(dt.date.fromisoformat(nxt["date"]), "%b %-d"))
+                    pts.append(("", nxt["eps_estimate"], None))
+                st.plotly_chart(charts.earnings_dots(labels, [x[1] for x in pts], [x[2] for x in pts],
+                                                     names=(T("Expected"), T("Beat"), T("Missed"))),
+                                config=charts.CONFIG, key=f"eps_{t}_{lang()}")
+            else:
+                st.caption(T("No reported EPS available."))
+        with b:
+            st.html(f'<div class="mb-sec">{T("Each report")} {src("rep")} {src("mkt")}</div>')
+            body = ""
+            for _, r in reversed(items):
+                ea, ee = r.get("eps_actual"), r.get("eps_estimate")
+                ra, re_ = r.get("rev_actual"), r.get("rev_estimate")
+                verdict = ""
+                if isnum(ea) and isnum(ee):
+                    verdict = f'<span class="mb-lean {"up" if ea > ee else "down" if ea < ee else "hold"}">{T("Beat") if ea > ee else T("Missed") if ea < ee else T("In line")}</span>'
+                rev = (f'{money(ra, 1)}' + (f' <span class="co">{T("vs")} {money(re_, 1)}</span>' if isnum(re_) else "")) if isnum(ra) else "n/a"
+                body += (f'<tr><td class="l">{esc(_q_label(r.get("period") or r.get("date") or ""))}'
+                         f'<span class="co">{D(dt.date.fromisoformat(r["date"]), "%b %-d, %Y") if r.get("date") else ""}</span></td>'
+                         f'<td class="num">{f"${ea:,.2f}" if isnum(ea) else "n/a"}<span class="co">{T("vs")} {f"${ee:,.2f}" if isnum(ee) else "n/a"}</span></td>'
+                         f'<td>{verdict}</td><td class="num">{rev}</td>'
+                         f'<td class="num {signed_class(r.get("reaction"))}">{pct(r.get("reaction"), 1) if r.get("reaction") is not None else "n/a"}</td></tr>')
+            st.html(f'<div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">{T("Quarter")}</th><th>EPS</th><th></th>'
+                    f'<th>{T("Revenue")}</th><th>{T("Stock move")}</th></tr>{body}</table></div>'
+                    '<p class="mb-foot">' + T("Quarter = fiscal period end. Stock move = close-to-close on the first session after the report (the report day if it came before the open). Estimates are the analysts' consensus from Finnhub.") + "</p>")
+    # quarterly trend from the 10-Q filings
+    qs = (f or {}).get("quarters") or {}
+    rev = qs.get("revenue")
+    if rev is not None and len(rev) >= 4:
+        df = rev.set_index("end")[["value", "derived"]].rename(columns={"value": "revenue"})
+        for k in ("net_income", "operating_income", "gross_profit"):
+            s = qs.get(k)
+            if s is not None and len(s):
+                df[k] = s.set_index("end")["value"].reindex(df.index)
+        df = df.tail(9)
+        df["yoy"] = df["revenue"] / df["revenue"].shift(4) - 1
+        show = df.tail(8 if len(df) >= 8 else len(df))
+        labels = [_q_label(e) for e in show.index]
+        st.html(f'<div class="mb-sec">{T("Quarterly results")} <span class="mb-tagx">{T("SEC 10-Q and 10-K")}</span> {src("rep")}</div>')
+        q1, q2 = st.columns([1.15, 1], gap="medium")
+        with q1:
+            st.plotly_chart(charts.financial_bars(labels, [(T("Revenue"), list(show["revenue"] / 1e9), "accent")] + (
+                [(T("Net income"), list(show["net_income"] / 1e9), "teal")] if "net_income" in show else []), height=280),
+                config=charts.CONFIG, key=f"qrev_{t}_{lang()}")
+        with q2:
+            body = ""
+            for e_, r in show.iloc[::-1].iterrows():
+                om = r.get("operating_income") / r["revenue"] if isnum(r.get("operating_income")) and r["revenue"] else None
+                nm = r.get("net_income") / r["revenue"] if isnum(r.get("net_income")) and r["revenue"] else None
+                body += (f'<tr><td class="l">{esc(_q_label(e_))}{" *" if r["derived"] else ""}</td><td class="num">{money(r["revenue"], 1)}</td>'
+                         f'<td class="num {signed_class(r["yoy"]) if isnum(r["yoy"]) else ""}">{pct(r["yoy"], 1) if isnum(r["yoy"]) else "n/a"}</td>'
+                         f'<td class="num">{pct(om, 1, False) if om is not None else "n/a"}</td><td class="num">{pct(nm, 1, False) if nm is not None else "n/a"}</td></tr>')
+            st.html(f'<div class="mb-scroll"><table class="mb-tbl"><tr><th class="l">{T("Quarter ending")}</th><th>{T("Revenue")}</th>'
+                    f'<th>{T("vs a year ago")}</th><th>{T("Operating margin")}</th><th>{T("Net margin")}</th></tr>{body}</table></div>'
+                    '<p class="mb-foot">' + T("* Fourth fiscal quarter: there is no 10-Q for it, so it is the fiscal year from the 10-K minus the first three quarters.") + "</p>")
 
 
 # =========================================================================== Valuation
@@ -720,3 +961,215 @@ def analysts_section(c: dict) -> None:
             f'<div class="mb-story"><h3>{T("Coming catalysts")}</h3><ul>{cats}</ul></div></div>'
             f'<div class="mb-callout"><b>{T("Conclusion.")}</b> {esc(take.get("conclusion", ""))}</div><p class="mb-note">'
             + T("Not investment advice · statistics describe the past, they don't predict the future.") + "</p>")
+
+
+# =========================================================================== PDF report
+def _pdf_labels() -> dict:
+    return {
+        "kicker": T("EQUITY REPORT"), "band": T("Equity report") + " · " + D(dt.date.today(), "%b %-d, %Y"),
+        "footer": T("Market Brief · tomas-market-brief.streamlit.app · For information and learning, not investment advice"),
+        "page": T("Page {n}"), "perf": T("Price vs the S&P 500, last year"), "period": T("Period"), "diff": T("Difference"),
+        "key_stats": T("Key statistics"), "financials": T("Financials and ratios"), "checks": T("Health checks"),
+        "eva": T("Economic value added"), "valuation": T("Valuation"), "comps": T("Comparable companies"),
+        "earnings": T("Earnings record"), "eps_chart": T("EPS: reported vs expected"), "risk": T("Risk"),
+        "street": T("Wall Street consensus"), "ai": T("AI take"), "price": T("Price"),
+        "src_mkt": T("Source: Twelve Data, Finnhub"), "src_mkt_calc": T("Source: market data · calculated"),
+        "src_rep": T("Source: SEC 10-K filings · calculated"), "src_calc": T("Calculated by the app"),
+        "src_comps": T("Source: Finnhub peers and multiples (TTM)"), "src_earn": T("Source: Finnhub, SEC"),
+        "src_ana": T("Source: Finnhub recommendation trends"), "src_ai": T("AI-written from the app's data (Google Gemini)"),
+        "disclaimer": T("Every figure comes from the sources named in each section or is calculated from them; AI text is labeled. Statistics describe the past and don't predict the future. This report is for information and learning and is not investment advice."),
+    }
+
+
+def report_data(c: dict) -> dict:
+    t, q, hist, m, met, prof = c["t"], c["q"], c["hist"], c["m"], c["met"], c["p"]
+    price = float(q["price"])
+    close, bench = hist["close"], c["bench"]
+    val = st.session_state.get(f"val_{t}") or safe(default_val, c) or {}
+    f = val.get("fundamentals") or safe(data.company_fundamentals, t)
+    recs = safe(data.recommendations, t, default=[]) or []
+    cs = analysis.consensus(recs[0]) if recs else None
+    r: dict = {"labels": _pdf_labels(), "ticker": t, "name": prof.get("name") or t, "price": price, "change_pct": q.get("pct"),
+               "change_txt": f'{sgn(q.get("change") or 0, 2, "")} ({sgn(q.get("pct") or 0)})',
+               "asof": T("As of {d}", d=when(q.get("time"))),
+               "meta_line": " · ".join(x for x in (t, (prof.get("exchange") or "").replace("NASDAQ NMS - GLOBAL MARKET", "Nasdaq"),
+                                                   T(prof.get("industry") or ""), prof.get("country") or "") if x)}
+    # KPIs
+    k = [(T("Market cap"), money(prof.get("market_cap"), 1), "", None)]
+    if val.get("base"):
+        k.append((T("DCF value"), f'${val["base"]:,.0f}', T("{g} vs price", g=pct(val["gap"], 0)), tone(val["gap"])))
+        k.append((T("Bear – bull"), f'${val["bear"]:,.0f}–{val["bull"]:,.0f}', T("DCF scenarios"), None))
+    k.append((T("1-year return"), pct(m["ret_1y"], 1), T("S&P 500 {x}", x=pct(analysis.period_return(bench, 252), 1)) if bench is not None else "",
+              tone(m["ret_1y"])))
+    if cs:
+        k.append((T("Wall Street"), T(cs["label"]), T("{s} / 5 · {n} analysts", s=f'{cs["score"]:.2f}', n=cs["n"]), None))
+    take = st.session_state.get(f"take_{t}_{lang()}")
+    if take and take.get("lean"):
+        k.append((T("AI lean"), T(take["lean"]), T("Conviction") + ": " + T(take.get("conviction") or "n/a"), None))
+    r["kpis"] = k[:6]
+    # one-line summary from the numbers (no AI)
+    bits = []
+    if val.get("base"):
+        bits.append(T("At ${p} the stock trades {g} its DCF value of ${v} (base case, {src}).", p=f"{price:,.2f}",
+                      g=T("{x} below", x=pct(abs(val['gap']), 0, False)) if val["gap"] > 0 else T("{x} above", x=pct(abs(val['gap']), 0, False)),
+                      v=f'{val["base"]:,.0f}', src=T("your assumptions") if val.get("source") == "your" else T("default assumptions")))
+        if val.get("implied") is not None:
+            bits.append(T("The price implies about {g} a year of free-cash-flow growth for five years.", g=pct(val["implied"], 1, False)))
+    if cs:
+        bits.append(T("Wall Street's consensus is {l} ({s} / 5).", l=T(cs["label"]), s=f'{cs["score"]:.2f}'))
+    r["summary"] = " ".join(bits)
+    # chart: 1 year rebased
+    df = pd.DataFrame({"s": close, "b": bench}).dropna().iloc[-253:] if bench is not None else pd.DataFrame({"s": close}).iloc[-253:]
+    r["chart"] = {"stock": list((df["s"] / df["s"].iloc[0] - 1) * 100),
+                  "bench": list((df["b"] / df["b"].iloc[0] - 1) * 100) if "b" in df else [],
+                  "dates": [D(d, "%b %Y") for d in df.index]}
+    perf = []
+    for label, n in (("1 month", 21), ("3 months", 63), ("YTD", None), ("1 year", 252), ("3 years", 756)):
+        r1 = analysis.ytd_return(close) if n is None else analysis.period_return(close, n)
+        r2 = (analysis.ytd_return(bench) if n is None else analysis.period_return(bench, n)) if bench is not None else None
+        if r1 is None:
+            continue
+        rel = r1 - r2 if r2 is not None else None
+        perf.append([T(label), (pct(r1), tone(r1)), (pct(r2), tone(r2)), (pct(rel), tone(rel))])
+    r["perf_rows"] = perf
+    dy = met.get("currentDividendYieldTTM") or met.get("dividendYieldIndicatedAnnual")
+    r["key_stats"] = [[T(a), b] for a, b in (
+        ("P/E (TTM)", num(met.get("peTTM"), 1, "x") if (met.get("peTTM") or 0) > 0 else "n/m"),
+        ("EPS (TTM)", f'${met["epsTTM"]:,.2f}' if isnum(met.get("epsTTM")) else "n/a"),
+        ("Dividend yield", f"{dy:.2f}%" if isnum(dy) and dy else T("None")),
+        ("52-week range", f'{c["low52"]:,.2f} – {c["high52"]:,.2f}'),
+        ("Volatility", pct(m["volatility"], 1, False)), ("Beta vs SPY", num(m["beta"])),
+        ("Sharpe, 1Y", num(m["sharpe"])), ("Max drawdown, 1Y", pct(m["max_drawdown"], 1)))]
+    # financials and ratios
+    if f and not f["revenue"].empty:
+        ratios = analysis.statement_analysis(f)
+        years = list(ratios.columns)[-5:]
+        g = lambda s_, y: float(s_[y]) if s_ is not None and y in s_.index and isnum(s_[y]) else None  # noqa: E731
+        rows, groups = [], set()
+        def add_group(name):
+            groups.add(len(rows))
+            rows.append([name] + [""] * len(years))
+        add_group(T("Income and cash flow"))
+        for lbl, s_ in (("Revenue", f["revenue"]), ("Operating income", f["operating_income"]), ("Net income", f["net_income"]),
+                        ("Free cash flow", f["fcf"])):
+            rows.append([T(lbl)] + [money(g(s_, y), 1) if g(s_, y) is not None else "n/a" for y in years])
+        for grp, keys in ((T("Growth and margins"), ("revenue_growth", "gross_margin", "operating_margin", "net_margin", "fcf_margin")),
+                          (T("Returns, DuPont and balance sheet"), ("roe", "roa", "asset_turnover", "equity_multiplier", "current_ratio",
+                                                                   "net_debt_ebitda", "interest_coverage", "cash_conversion"))):
+            add_group(grp)
+            for key in keys:
+                lbl = next((x[2] for x in RATIO_ROWS if x[1] == key), key)
+                kind = next((x[3] for x in RATIO_ROWS if x[1] == key), "pct")
+                if key not in ratios.index or ratios.loc[key, years].isna().all():
+                    continue
+                rows.append([T(lbl).lstrip("× ")] + [(fmt_ratio(ratios.at[key, y], kind), tone(ratios.at[key, y]) if kind == "growth" else None) for y in years])
+        r["fin_years"], r["fin_rows"], r["fin_groups"] = years, rows, groups
+        cols = {"good": UP_C, "watch": AMBER_C, "bad": DOWN_C}
+        r["checks"] = [(T(msg, **kw), cols[lv]) for lv, msg, kw in analysis.health_checks(ratios[years])]
+        wacc_v, wacc_src = wacc_for(c, f)
+        e = analysis.eva(f, wacc_v)
+        if not e.empty and not e["eva"].dropna().empty:
+            last, yr = e.dropna(subset=["eva"]).iloc[-1], e.dropna(subset=["eva"]).index[-1]
+            r["eva"] = {"kpis": [("ROIC", pct(last["roic"], 1, False), f"FY{yr}", None), ("WACC", pct(wacc_v, 1, False), "", None),
+                                 ("EVA", money(last["eva"], 1), T("creates value") if last["eva"] > 0 else T("destroys value"), tone(last["eva"])),
+                                 (T("Capital employed"), money(last["capital"], 1), T("debt + equity"), None)],
+                        "note": T("NOPAT − WACC × capital employed. WACC {w}, {src}.", w=pct(wacc_v, 1, False), src=wacc_src)}
+    # valuation
+    if val.get("base"):
+        _, implied_peers = peer_comps(t, price, met)
+        ranges = [(T("DCF scenarios, bear to bull"), val["bear"], val["bull"]), (T("52-week trading range"), c["low52"], c["high52"])]
+        if m["volatility"]:
+            lo3, hi3 = analysis.statistical_range(price, m["volatility"], 63)
+            ranges.append((T("3-month statistical range"), lo3, hi3))
+        ranges += peer_ff_row(implied_peers)
+        r["valuation"] = {
+            "kpis": [(T("DCF value (base)"), f'${val["base"]:,.2f}', T("{g} vs price", g=pct(val["gap"], 0)), tone(val["gap"])),
+                     (T("Growth, years 1–5"), pct(val["growth"], 1, False), T("free cash flow"), None),
+                     (T("Discount rate"), pct(val["discount"], 1, False), "WACC", None),
+                     (T("Terminal growth"), pct(val["g_term"], 1, False), "", None),
+                     (T("Price implies"), pct(val["implied"], 1, False) if val.get("implied") is not None else "n/a", T("FCF growth, 5 years"), None)],
+            "text": T("Verdict under these assumptions: {l}. Bear case ${b} (growth −5 points, discount rate +1), bull case ${u} (the opposite). {src}",
+                      l=T(val["label"]), b=f'{val["bear"]:,.0f}', u=f'{val["bull"]:,.0f}',
+                      src=T("Assumptions set in the app's Valuation tab.") if val.get("source") == "your" else T("Default assumptions: revenue CAGR capped at 0–20%, CAPM cost of equity with a 5% premium.")),
+            "ranges": ranges, "ranges_note": T("Each bar is a range of values per share; the dashed line is today's price."),
+        }
+        comps, implied = peer_comps(t, price, met)
+        if comps:
+            mult = list(analysis.COMP_MULTIPLES)[:4]
+            def mrow(name, mm):
+                vals = [analysis.metric_value(mm, analysis.COMP_MULTIPLES[k], positive=True) for k in mult]
+                gm = analysis.metric_value(mm, analysis.COMP_QUALITY["Revenue growth"])
+                return [name] + [f"{v:,.1f}x" if v is not None and v < 500 else "n/m" for v in vals] + [f"{gm:,.1f}%" if gm is not None else "n/a"]
+            rows = [mrow(t, met)] + [mrow(x["ticker"], x["met"]) for x in comps[:7]]
+            rows.append([T("Peer median")] + [f'{implied[k]["median"]:,.1f}x' if implied.get(k) else "–" for k in mult] + [""])
+            imp = [f'{k} ${v["implied"]:,.0f}' for k, v in implied.items() if v.get("implied")]
+            r["comps_header"] = [T("Company")] + mult + [T("Revenue growth")]
+            r["comps_rows"] = rows
+            r["comps_note"] = (T("Value per share at the peer median: {v}.", v=", ".join(imp)) + " " if imp else "") + T("Trailing twelve months; negative multiples are not meaningful (n/m).")
+    # earnings
+    surprises = safe(data.earnings_surprises, t, default=[]) or []
+    cal = safe(data.earnings_history, t, default=[]) or []
+    by_q = {(x.get("year"), x.get("quarter")): x for x in cal}
+    erows, labels, exp_, act_ = [], [], [], []
+    for x in surprises[-4:]:
+        h_ = by_q.get((x.get("year"), x.get("quarter")), {})
+        react = analysis.earnings_reaction(close, h_["date"], h_.get("hour") or "") if h_.get("date") else None
+        sp = x.get("surprise_pct")
+        erows.append([_q_label(x["period"]), f'${x["actual"]:,.2f}', f'${x["estimate"]:,.2f}' if isnum(x.get("estimate")) else "n/a",
+                      (sgn(sp, 1) if isnum(sp) else "n/a", tone(sp) if isnum(sp) else None),
+                      (pct(react, 1) if react is not None else "n/a", tone(react))])
+        labels.append(_q_label(x["period"]))
+        exp_.append(x.get("estimate"))
+        act_.append(x["actual"])
+    if erows:
+        nxt = next((x for x in cal if x["date"] >= dt.date.today().isoformat() and x.get("eps_actual") is None), None)
+        r["earn_header"] = [T("Quarter"), T("EPS"), T("Expected"), T("Surprise"), T("Stock move")]
+        r["earn_rows"] = list(reversed(erows))
+        r["eps_chart"] = {"labels": labels, "expected": exp_, "actual": act_}
+        r["earn_note"] = T("Hollow circle: analysts' estimate; filled: reported (green beat, red miss).") + (
+            " " + T("Next report: {d}, EPS estimate {e}.", d=D(dt.date.fromisoformat(nxt["date"]), "%b %-d"),
+                    e=f'${nxt["eps_estimate"]:,.2f}' if isnum(nxt.get("eps_estimate")) else "n/a") if nxt else "")
+    tail = analysis.tail_stats(close)
+    capa = analysis.capture_alpha(close, bench, c["rf"]) if bench is not None else {}
+    rr = [[T("Volatility, 1 year"), pct(m["volatility"], 1, False)], [T("Beta vs S&P 500"), num(m["beta"])],
+          [T("Max drawdown, 1 year"), (pct(m["max_drawdown"], 1), DOWN_C)]]
+    if tail:
+        rr += [[T("1 day in 20, loss at least (VaR 95%)"), pct(-tail["var95"], 2)], [T("Average loss on those days (ES 95%)"), pct(-tail["es95"], 2)]]
+    if capa.get("up_capture") is not None:
+        rr += [[T("Up / down capture vs S&P 500"), f'{capa["up_capture"] * 100:.0f}% / {capa["down_capture"] * 100:.0f}%']]
+    if capa.get("alpha") is not None:
+        rr += [[T("Alpha, 1 year (Jensen)"), (pct(capa["alpha"], 1), tone(capa["alpha"]))]]
+    r["risk_rows"] = rr
+    if cs:
+        k_ = cs["counts"]
+        r["consensus"] = {"kpis": [(T("Consensus"), T(cs["label"]), f'{cs["score"]:.2f} / 5', None),
+                                   (T("Analysts"), str(cs["n"]), cs["period"], None)],
+                          "note": T("Strong buy {a} · buy {b} · hold {c} · sell {d} · strong sell {e}. Sell-side ratings lean positive in general.",
+                                    a=k_["strongBuy"], b=k_["buy"], c=k_["hold"], d=k_["sell"], e=k_["strongSell"])}
+    if take and take.get("lean"):
+        paras = [take.get(x) for x in ("lean_reason", "situation", "fundamentals", "valuation", "conclusion") if take.get(x)]
+        if take.get("risks"):
+            paras.append(T("Main risks") + ": " + "; ".join(take["risks"]))
+        if take.get("catalysts"):
+            paras.append(T("Coming catalysts") + ": " + "; ".join(take["catalysts"]))
+        r["ai"] = {"lean": T(take["lean"]), "conviction": T("Conviction") + ": " + T(take.get("conviction") or "n/a"),
+                   "color": UP_C if take["lean"] == "Buy" else DOWN_C if take["lean"] == "Sell" else AMBER_C, "paragraphs": paras}
+    return r
+
+
+def pdf_controls(c: dict) -> None:
+    t = c["t"]
+    val = st.session_state.get(f"val_{t}") or {}
+    take = st.session_state.get(f"take_{t}_{lang()}") or {}
+    sig = hashlib.md5(repr((round(val.get("base") or 0, 2), val.get("discount"), str(take.get("generated_at")), lang(),
+                            dt.date.today().isoformat())).encode()).hexdigest()[:10]
+    key = f"pdf_{t}_{sig}"
+    if key in st.session_state:
+        st.download_button(T("⤓ Download PDF"), data=st.session_state[key], file_name=f"{t}_Market_Brief_{dt.date.today():%Y-%m-%d}.pdf",
+                           mime="application/pdf", width="stretch", key=f"dl_{key}")
+    elif st.button(T("PDF report"), key=f"mk_{key}", width="stretch",
+                   help=T("A printable report with everything on this page: price, financials and ratios, valuation, peers, earnings, risk, Wall Street and the AI take if you generated it.")):
+        with st.spinner(T("Building the report…")):
+            import reports
+            st.session_state[key] = reports.stock_pdf(report_data(c))
+        st.rerun()

@@ -13,7 +13,7 @@ from ui import esc, link, logo_uri, sgn
 DEFAULT_WATCHLIST = ["AAPL", "NVDA", "MSFT", "GOOGL", "TSLA"]
 MAX_WATCHLIST = 8
 BENCHMARK = "SPY"
-PAGES = {"Markets": "markets", "News": "news", "Portfolio": "portfolio", "Map": "map", "Watchlist": "watchlist", "Compare": "compare", "Research": "research",
+PAGES = {"Markets": "markets", "News": "news", "Portfolio": "portfolio", "Map": "map", "Watchlist": "watchlist", "Compare": "compare",
          "Stock": "stock", "Methodology": "method"}
 INDEX_ETFS = [("S&P 500", "SPY"), ("Nasdaq 100", "QQQ"), ("Dow Jones", "DIA"), ("Russell 2000", "IWM"),
               ("Gold", "GLD"), ("Crude oil", "USO")]

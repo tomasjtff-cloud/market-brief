@@ -15,6 +15,7 @@ from i18n import T
 from ui import P
 
 FONT = "Inter, system-ui, sans-serif"
+MONO = "JetBrains Mono, ui-monospace, monospace"
 CONFIG = {"displayModeBar": False, "scrollZoom": False}
 
 
@@ -264,7 +265,7 @@ def compare_lines(series: dict[str, pd.Series], highlight: str | None = None, he
                                            dash="dot" if is_bench else "solid"),
                                  hovertemplate="%{y:+.1f}%<extra>" + name + "</extra>"))
         fig.add_annotation(xref="paper", x=1.0, y=perf.iloc[-1], xanchor="left", showarrow=False,
-                           text=f"<b>{name} {perf.iloc[-1]:+.1f}%</b>", font=dict(size=10, color="#FFF"),
+                           text=f"<b>{name} {perf.iloc[-1]:+.1f}%</b>", font=dict(size=10, color=p["paper"] if is_bench else "#FFF"),
                            bgcolor=p["ink"] if is_bench else palette[i % len(palette)], borderpad=2)
     base(fig, height)
     fig.update_yaxes(ticksuffix="%", zeroline=True, zerolinecolor=p["line"])
@@ -538,4 +539,46 @@ def allocation_bars(rows: list[tuple[str, dict[str, float]]], colors: dict[str, 
                       legend=dict(orientation="h", y=-0.18, x=0, yanchor="top"))
     fig.update_xaxes(range=[0, 100], ticksuffix="%", showgrid=False, showspikes=False, showticklabels=False)
     fig.update_yaxes(showgrid=False, showspikes=False, autorange="reversed", tickfont=dict(size=12, color=p["ink"]))
+    return fig
+
+
+def earnings_dots(labels: list[str], expected: list, actual: list, names: tuple[str, str, str], height: int = 300) -> go.Figure:
+    """Earnings per share: hollow circle = analysts' estimate, filled = reported (green beat, red miss)."""
+    p = P()
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=labels, y=expected, mode="markers", name=names[0],
+                             marker=dict(size=17, color="rgba(0,0,0,0)", line=dict(color=p["faint"], width=2)),
+                             hovertemplate=names[0] + " $%{y:.2f}<extra></extra>"))
+    for want_beat, name, key in ((True, names[1], "up"), (False, names[2], "down")):
+        xs, ys = [], []
+        for lb, e, a in zip(labels, expected, actual):
+            if a is None or e is None:
+                continue
+            if (a >= e) == want_beat:
+                xs.append(lb)
+                ys.append(a)
+        fig.add_trace(go.Scatter(x=xs, y=ys, mode="markers", name=name, marker=dict(size=13, color=p[key]),
+                                 hovertemplate=name + " $%{y:.2f}<extra></extra>"))
+    base(fig, height)
+    fig.update_layout(hovermode="x unified")
+    fig.update_yaxes(tickprefix="$", tickformat=".2f")
+    fig.update_xaxes(showspikes=False, type="category")
+    return fig
+
+
+def attribution_bars(labels: list[str], values: list[float], height: int = 300) -> go.Figure:
+    """Horizontal bars in percentage points, green positive and red negative, largest at the top."""
+    p = P()
+    fig = go.Figure(go.Bar(y=labels[::-1], x=[v * 100 for v in values[::-1]], orientation="h",
+                           marker=dict(color=[p["up"] if v >= 0 else p["down"] for v in values[::-1]], cornerradius=3),
+                           text=[f"{v * 100:+.2f} pp" for v in values[::-1]], textposition="outside", cliponaxis=False,
+                           textfont=dict(family=MONO, size=11, color=p["ink"]),
+                           hovertemplate="%{y}: %{x:+.2f} pp<extra></extra>"))
+    base(fig, height, right_axis=False, legend=False)
+    lo, hi = min([0.0] + [v * 100 for v in values]), max([0.0] + [v * 100 for v in values])
+    span = (hi - lo) or 1.0
+    fig.update_layout(hovermode="closest", margin=dict(l=8, r=8, t=10, b=6))
+    fig.update_xaxes(ticksuffix=" pp", zeroline=True, zerolinecolor=p["line"], showspikes=False,
+                     range=[lo - span * (0.32 if lo < 0 else 0.02), hi + span * (0.3 if hi > 0 else 0.02)])
+    fig.update_yaxes(showspikes=False, gridcolor="rgba(0,0,0,0)")
     return fig

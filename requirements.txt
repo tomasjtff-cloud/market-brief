@@ -5,3 +5,4 @@ plotly==7.1.0
 requests
 feedparser==6.0.14
 scipy==1.18.1
+reportlab==5.0.1

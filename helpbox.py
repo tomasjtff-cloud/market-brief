@@ -17,6 +17,7 @@ HELP: dict[str, dict[str, dict]] = {
                 "Start with the index cards: the big number is the price, the coloured pill is today's change and the bar shows where the price sits between today's low (left) and high (right).",
                 "Sector bars tell you what is leading and lagging today. When defensive sectors (utilities, consumer staples, health care) lead, investors are usually cautious; when technology and consumer discretionary lead, they are taking risk.",
                 "The yield curve shows what the US government pays to borrow for each term. Normally longer terms pay more (an upward curve). If short rates are above long rates (an inverted curve), markets expect rate cuts and slower growth.",
+                "'Earnings this week' shows which of your watchlist and the largest companies already reported (beat or missed the analysts' EPS estimate) and who reports next.",
                 "The morning note links each story to its sources: open them before relying on a summary.",
             ],
             "terms": [
@@ -34,6 +35,7 @@ HELP: dict[str, dict[str, dict]] = {
                 "Empezá por las tarjetas de índices: el número grande es el precio, la píldora de color es la variación de hoy y la barra muestra dónde está el precio entre el mínimo (izquierda) y el máximo (derecha) del día.",
                 "Las barras por sector muestran qué lidera y qué se queda atrás hoy. Cuando lideran los sectores defensivos (servicios públicos, consumo básico, salud), los inversores suelen estar cautos; cuando lideran tecnología y consumo discrecional, están tomando riesgo.",
                 "La curva de rendimientos muestra cuánto paga el gobierno de EE.UU. por endeudarse a cada plazo. Lo normal es que los plazos largos paguen más (curva ascendente). Si las tasas cortas superan a las largas (curva invertida), el mercado espera recortes de tasas y menos crecimiento.",
+                "'Resultados de la semana' muestra qué empresas de tu watchlist y de las más grandes ya reportaron (si superaron o no la UPA estimada por los analistas) y cuáles reportan después.",
                 "La nota de la mañana enlaza cada historia con sus fuentes: abrilas antes de basarte en un resumen.",
             ],
             "terms": [
@@ -157,6 +159,8 @@ HELP: dict[str, dict[str, dict]] = {
                 ("Annualised return", "The yearly rate that would give the same total return."),
                 ("Sharpe", "Return above the 10-year Treasury divided by volatility: return per unit of risk."),
                 ("Correlation", "From −1 to +1, how closely two daily return series move together."),
+                ("Up / down capture", "How much of the S&P 500's good and bad weeks the stock captured. 110% up and 80% down means it gained more in good weeks and lost less in bad ones."),
+                ("Alpha", "Return beyond what the stock's beta and the market explain (Jensen's alpha, one year). Positive = it did better than its risk alone would suggest."),
             ],
             "keep": ["Past returns don't predict future ones; the period you pick can change the story a lot."],
         },
@@ -173,43 +177,10 @@ HELP: dict[str, dict[str, dict]] = {
                 ("Rendimiento anualizado", "La tasa anual que daría el mismo rendimiento total."),
                 ("Sharpe", "Rendimiento por encima del bono del Tesoro a 10 años dividido por la volatilidad: rendimiento por unidad de riesgo."),
                 ("Correlación", "De −1 a +1, cuánto se mueven juntas dos series de rendimientos diarios."),
+                ("Captura al alza / a la baja", "Cuánto de las semanas buenas y malas del S&P 500 capturó la acción. 110% al alza y 80% a la baja significa que ganó más en las buenas y perdió menos en las malas."),
+                ("Alfa", "El rendimiento que no explican la beta de la acción ni el mercado (alfa de Jensen, un año). Positivo = le fue mejor de lo que su riesgo por sí solo sugeriría."),
             ],
             "keep": ["Los rendimientos pasados no predicen los futuros; el período que elijas puede cambiar mucho la historia."],
-        },
-    },
-    # ------------------------------------------------------------------ Research
-    "research": {
-        "en": {
-            "title": "Research",
-            "what": "Investment pitches with a live track record. Each pitch is a call (Long, Short or Neutral) made on a date; the app measures it against the S&P 500 from that day.",
-            "how": [
-                "Stock return is how much the stock moved since the pitch; 'Call vs S&P 500' is that return minus the index's, with the sign flipped for Short calls. Positive means the call beat the market.",
-                "'Beat the S&P 500' counts how many calls did so; the averages summarise the whole track record.",
-                "To publish a pitch: 'Write a pitch' builds a file with today's date and price; upload it to the research folder on GitHub and it appears here.",
-                "A good pitch has a clear thesis, a valuation that supports a target, catalysts with timing, and the risks that would prove it wrong.",
-            ],
-            "terms": [
-                ("Long / Short", "Long = you expect the stock to beat the market; Short = you expect it to lag."),
-                ("Catalyst", "An event that could make the market agree with your view (earnings, a product, a regulatory decision)."),
-                ("Price target", "Your estimate of what the stock is worth over the stated horizon."),
-            ],
-            "keep": ["Returns use prices only (no dividends).", "A short track record says little: judge it after several calls and months."],
-        },
-        "es": {
-            "title": "Research",
-            "what": "Tesis de inversión con historial en vivo. Cada tesis es una recomendación (Long, Short o Neutral) hecha en una fecha; la app la mide contra el S&P 500 desde ese día.",
-            "how": [
-                "El rendimiento de la acción es cuánto se movió desde la tesis; 'Recomendación vs S&P 500' es ese rendimiento menos el del índice, con el signo invertido para los Short. Positivo significa que la recomendación le ganó al mercado.",
-                "'Le ganaron al S&P 500' cuenta cuántas lo lograron; los promedios resumen todo el historial.",
-                "Para publicar: 'Escribir una tesis' arma un archivo con la fecha y el precio de hoy; subilo a la carpeta research en GitHub y aparece acá.",
-                "Una buena tesis tiene una idea clara, una valuación que respalde el objetivo, catalizadores con fecha y los riesgos que la invalidarían.",
-            ],
-            "terms": [
-                ("Long / Short", "Long = esperás que la acción le gane al mercado; Short = esperás que quede atrás."),
-                ("Catalizador", "Un evento que puede hacer que el mercado coincida con tu visión (resultados, un producto, una decisión regulatoria)."),
-                ("Precio objetivo", "Tu estimación de lo que vale la acción en el horizonte indicado."),
-            ],
-            "keep": ["Los rendimientos usan solo precios (sin dividendos).", "Un historial corto dice poco: evaluarlo después de varias recomendaciones y meses."],
         },
     },
     # ------------------------------------------------------------------ Stock sections
@@ -222,6 +193,7 @@ HELP: dict[str, dict[str, dict]] = {
                 "Price above its 200-day average is usually read as a long-term uptrend; below, a downtrend.",
                 "'Performance vs S&P 500' shows whether the stock beat the market over each period ('Difference' column).",
                 "Key levels show how far the price is from its 52-week high and low and from its moving averages.",
+                "'PDF report' (top right) builds a printable report with every tab of the analysis: useful to save, print or send.",
             ],
             "terms": [
                 ("EPS (TTM)", "Earnings per share over the trailing twelve months."),
@@ -239,6 +211,7 @@ HELP: dict[str, dict[str, dict]] = {
                 "Un precio por encima de su promedio de 200 días suele leerse como tendencia alcista de largo plazo; por debajo, bajista.",
                 "'Rendimiento vs S&P 500' muestra si la acción le ganó al mercado en cada período (columna 'Diferencia').",
                 "Los niveles clave muestran qué tan lejos está el precio de su máximo y mínimo de 52 semanas y de sus promedios móviles.",
+                "'Reporte PDF' (arriba a la derecha) arma un reporte imprimible con todas las pestañas del análisis: sirve para guardarlo, imprimirlo o mandarlo.",
             ],
             "terms": [
                 ("UPA (12M)", "Utilidad por acción de los últimos doce meses."),
@@ -262,6 +235,7 @@ HELP: dict[str, dict[str, dict]] = {
             "terms": [
                 ("σ (sigma)", "One standard deviation; about two thirds of outcomes fall within ±1σ."),
                 ("Drawdown", "How far the price is below its previous peak at each moment."),
+                ("VaR and expected shortfall", "The 'Tail risk' table: the loss the stock exceeded on 1 day in 20 (or 1 in 100), and the average loss on those days. If it is bigger than what a normal bell curve says, the stock has fat tails: crashes are more common than a normal model assumes."),
             ],
             "keep": ["Indicators describe the past; on their own they are weak signals."],
         },
@@ -277,6 +251,7 @@ HELP: dict[str, dict[str, dict]] = {
             "terms": [
                 ("σ (sigma)", "Un desvío estándar; cerca de dos tercios de los resultados caen dentro de ±1σ."),
                 ("Caída desde máximos", "Cuánto está el precio por debajo de su máximo previo en cada momento."),
+                ("VaR y expected shortfall", "La tabla de 'Riesgo de cola': la pérdida que la acción superó 1 día de cada 20 (o de cada 100) y la pérdida promedio esos días. Si es mayor que lo que dice una campana normal, la acción tiene colas gruesas: los desplomes son más comunes de lo que supone un modelo normal."),
             ],
             "keep": ["Los indicadores describen el pasado; solos son señales débiles."],
         },
@@ -289,12 +264,18 @@ HELP: dict[str, dict[str, dict]] = {
                 "Read top to bottom: revenue → gross profit (after direct costs) → operating income (after running the business) → net income (after interest and taxes).",
                 "Free cash flow = operating cash flow − capital expenditures: the cash the business really generates, and what the DCF values.",
                 "Margins show profitability per dollar of revenue; rising margins with rising revenue is the healthiest combination.",
+                "Health checks flag the latest year in plain words: green is fine, amber worth a look, red a real concern.",
+                "EVA tells you whether the company earns more on its capital (ROIC) than that capital costs (WACC). Positive EVA = value created.",
+                "In the statement analysis, read DuPont as a story: is ROE high because of margins (pricing power), turnover (efficiency) or the equity multiplier (debt)?",
             ],
             "terms": [
                 ("Gross margin", "Gross profit ÷ revenue."),
                 ("Operating margin", "Operating income ÷ revenue."),
                 ("Capex", "Money spent on long-lived assets (plants, equipment, data centres)."),
                 ("Net debt", "Debt minus cash and short-term investments."),
+                ("ROIC / WACC", "Return on invested capital (after-tax operating profit ÷ debt + equity) vs the cost of that capital."),
+                ("Cash conversion", "Operating cash flow ÷ net income. Below 1 for years can mean profits that aren't turning into cash."),
+                ("Days sales outstanding", "How many days customers take to pay. Rising faster than sales is a classic warning sign."),
             ],
             "keep": ["Only US companies that file 10-Ks are covered; ETFs and foreign filers aren't.", "Companies label some items differently, so an occasional line may be missing."],
         },
@@ -305,14 +286,54 @@ HELP: dict[str, dict[str, dict]] = {
                 "Leé de arriba hacia abajo: ingresos → utilidad bruta (después de costos directos) → utilidad operativa (después de operar el negocio) → utilidad neta (después de intereses e impuestos).",
                 "Flujo de caja libre = flujo operativo − inversión de capital: el efectivo que el negocio genera de verdad, y lo que valúa el DCF.",
                 "Los márgenes muestran la rentabilidad por cada dólar vendido; márgenes que suben junto con los ingresos es la combinación más sana.",
+                "Los chequeos de salud marcan el último año en palabras simples: verde está bien, ámbar conviene mirarlo, rojo es una preocupación real.",
+                "El EVA dice si la empresa gana sobre su capital (ROIC) más de lo que ese capital cuesta (WACC). EVA positivo = crea valor.",
+                "En el análisis de estados, leé DuPont como una historia: ¿el ROE es alto por los márgenes (poder de precios), la rotación (eficiencia) o el multiplicador de capital (deuda)?",
             ],
             "terms": [
                 ("Margen bruto", "Utilidad bruta ÷ ingresos."),
                 ("Margen operativo", "Utilidad operativa ÷ ingresos."),
                 ("Capex", "Dinero invertido en activos de largo plazo (plantas, equipos, centros de datos)."),
                 ("Deuda neta", "Deuda menos efectivo e inversiones de corto plazo."),
+                ("ROIC / WACC", "Rendimiento sobre el capital invertido (utilidad operativa después de impuestos ÷ deuda + patrimonio) contra el costo de ese capital."),
+                ("Conversión a caja", "Flujo operativo ÷ utilidad neta. Por debajo de 1 durante años puede indicar utilidades que no se convierten en efectivo."),
+                ("Días de cobro", "Cuántos días tardan los clientes en pagar. Que suban más rápido que las ventas es una señal de alerta clásica."),
             ],
             "keep": ["Solo cubre empresas de EE.UU. que presentan 10-K; no ETFs ni emisores extranjeros.", "Las empresas etiquetan algunas partidas distinto, así que alguna línea puede faltar."],
+        },
+    },
+    "stock_earnings": {
+        "en": {
+            "title": "Earnings",
+            "what": "The company's quarterly results against what analysts expected, how the stock reacted each time, the next report date and the quarterly trend of revenue and margins from the 10-Q filings.",
+            "how": [
+                "In the dot chart, the hollow circle is what analysts expected and the filled one what the company reported: green when it beat, red when it missed.",
+                "'Beat EPS estimates' and 'Average EPS surprise' show how reliable the company has been. Many companies beat by a little almost every quarter, so a miss usually matters more than a beat.",
+                "'Stock move' is the reaction on the first session after each report. 'Average move on results' tells you how big a jump to expect next time, in either direction.",
+                "The quarterly table shows revenue growth against the same quarter a year earlier (which removes seasonality) and the operating and net margins.",
+            ],
+            "terms": [
+                ("EPS", "Earnings per share: net income ÷ shares."),
+                ("Surprise", "(Reported − expected) ÷ expected. +5% means 5% above the consensus estimate."),
+                ("Before the open / after the close", "When the company publishes. Results after the close move the stock the next day."),
+            ],
+            "keep": ["The quarter marked * is derived: there is no 10-Q for the fourth fiscal quarter, so it is the year minus the first three.", "Estimates are the analysts' consensus collected by Finnhub."],
+        },
+        "es": {
+            "title": "Resultados",
+            "what": "Los resultados trimestrales de la empresa contra lo que esperaban los analistas, cómo reaccionó la acción cada vez, la fecha del próximo reporte y la tendencia trimestral de ingresos y márgenes de los 10-Q.",
+            "how": [
+                "En el gráfico de puntos, el círculo vacío es lo que esperaban los analistas y el lleno lo que reportó la empresa: verde si superó, rojo si no alcanzó.",
+                "'Superó la UPA estimada' y 'Sorpresa promedio' muestran qué tan confiable fue la empresa. Muchas superan por poco casi todos los trimestres, así que un fallo suele pesar más que una sorpresa positiva.",
+                "'Movimiento de la acción' es la reacción en la primera sesión después de cada reporte. 'Movimiento promedio con resultados' te dice cuánto salto esperar la próxima vez, para cualquier lado.",
+                "La tabla trimestral muestra el crecimiento de ingresos contra el mismo trimestre del año anterior (así se elimina la estacionalidad) y los márgenes operativo y neto.",
+            ],
+            "terms": [
+                ("UPA", "Utilidad por acción: utilidad neta ÷ acciones."),
+                ("Sorpresa", "(Reportado − esperado) ÷ esperado. +5% significa 5% por encima del consenso."),
+                ("Antes de la apertura / después del cierre", "Cuándo publica la empresa. Si es después del cierre, la acción reacciona al día siguiente."),
+            ],
+            "keep": ["El trimestre marcado con * es derivado: el cuarto trimestre fiscal no tiene 10-Q, así que es el año menos los tres primeros.", "Las estimaciones son el consenso de analistas que recopila Finnhub."],
         },
     },
     "stock_valuation": {
@@ -460,6 +481,7 @@ HELP: dict[str, dict[str, dict]] = {
                 "Unrealized P&L is the gain or loss on positions you still hold; realized P&L is what you locked in when selling.",
                 "The time-weighted return removes the effect of money you put in or took out, so it measures your investment decisions and can be compared with the S&P 500 over the same period.",
                 "The donuts show concentration by position and by sector. 'Effective number of positions' turns that into one number: 10 equal positions give 10, one dominant position pulls it towards 1.",
+                "'PDF report' (top right) builds a printable review: holdings, performance, attribution, risk, profile and the recommended portfolio.",
             ],
             "terms": [
                 ("Average cost", "What you paid per share on average, including fees."),
@@ -474,12 +496,49 @@ HELP: dict[str, dict[str, dict]] = {
                 "La ganancia/pérdida no realizada es la de las posiciones que todavía tenés; la realizada es la que concretaste al vender.",
                 "El rendimiento ponderado por tiempo elimina el efecto del dinero que pusiste o sacaste, así mide tus decisiones de inversión y se puede comparar con el S&P 500 en el mismo período.",
                 "Las donas muestran la concentración por posición y por sector. El 'número efectivo de posiciones' lo resume en un número: 10 posiciones iguales dan 10; una posición dominante lo acerca a 1.",
+                "'Reporte PDF' (arriba a la derecha) arma una revisión imprimible: posiciones, rendimiento, atribución, riesgo, perfil y portafolio recomendado.",
             ],
             "terms": [
                 ("Costo promedio", "Lo que pagaste por título en promedio, incluidas comisiones."),
                 ("Peso", "La parte del valor total que representa la posición, efectivo incluido."),
             ],
             "keep": ["Los valores usan la última cotización; las posiciones sin cotización quedan fuera hasta que vuelva."],
+        },
+    },
+    "pf_attribution": {
+        "en": {
+            "title": "Performance attribution",
+            "what": "Where your return came from: how much each position added or took away, and why you beat or trailed the S&P 500, split into sector bets, stock selection, cash and trading.",
+            "how": [
+                "Pick a period. The top row compares your time-weighted return with the S&P 500; 'Difference' is the gap in percentage points (pp).",
+                "Sector bets: you held sectors that did better or worse than the market. If you were heavy in tech and tech beat the S&P 500, that shows up here.",
+                "Stock selection: within each sector, did your stocks beat their sector ETF? This is the part that measures stock picking.",
+                "Cash: uninvested money earns nothing here, so in a rising market it costs you (and in a falling one it helps). Trading and fees: buying above or selling below that day's close, plus commissions.",
+                "'Contribution by position' adds up to your total return: it shows which positions really moved the portfolio, including ones you already sold.",
+            ],
+            "terms": [
+                ("pp", "Percentage points: from 5% to 7% is +2 pp."),
+                ("Sector ETF", "Each stock is measured against the SPDR ETF of its sector (XLK for technology, XLF for financials…)."),
+                ("Carino linking", "A standard way to add up daily effects so they match the period's compounded return exactly."),
+            ],
+            "keep": ["The S&P 500 here is SPY's price without dividends, the same benchmark as the Overview.", "Sectors come from each company's industry, so a few companies may sit in a different sector than in official indices."],
+        },
+        "es": {
+            "title": "Atribución de rendimiento",
+            "what": "De dónde vino tu rendimiento: cuánto sumó o restó cada posición, y por qué le ganaste o quedaste atrás del S&P 500, separado en apuestas sectoriales, selección de acciones, efectivo y operaciones.",
+            "how": [
+                "Elegí un período. La fila de arriba compara tu rendimiento ponderado por tiempo con el S&P 500; 'Diferencia' es la brecha en puntos porcentuales (pp).",
+                "Apuestas sectoriales: tuviste sectores que rindieron más o menos que el mercado. Si estabas cargado en tecnología y tecnología le ganó al S&P 500, se ve acá.",
+                "Selección de acciones: dentro de cada sector, ¿tus acciones le ganaron al ETF de su sector? Esta es la parte que mide tu capacidad para elegir acciones.",
+                "Efectivo: la plata sin invertir no rinde acá, así que en un mercado que sube te cuesta (y en uno que baja te ayuda). Operaciones y comisiones: comprar por encima o vender por debajo del cierre de ese día, más comisiones.",
+                "'Contribución por posición' suma tu rendimiento total: muestra qué posiciones movieron de verdad el portafolio, incluidas las que ya vendiste.",
+            ],
+            "terms": [
+                ("pp", "Puntos porcentuales: de 5% a 7% son +2 pp."),
+                ("ETF sectorial", "Cada acción se mide contra el ETF SPDR de su sector (XLK para tecnología, XLF para financieras…)."),
+                ("Encadenamiento de Carino", "Una forma estándar de sumar los efectos diarios para que coincidan exacto con el rendimiento compuesto del período."),
+            ],
+            "keep": ["El S&P 500 acá es el precio de SPY sin dividendos, el mismo benchmark que el Resumen.", "Los sectores salen de la industria de cada empresa, así que alguna puede quedar en un sector distinto al de los índices oficiales."],
         },
     },
     "pf_transactions": {

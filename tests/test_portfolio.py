@@ -96,3 +96,40 @@ def test_optimiser_respects_caps_and_target_vol():
 def test_shift_weights():
     w = pf.shift_weights({"A": 0.5, "B": 0.5}, "A", 0.3)
     assert w["A"] == pytest.approx(0.3) and w[pf.CASH] == pytest.approx(0.2)
+
+
+def _walk(seed, n=200, start=100.0, vol=0.015, drift=0.0004):
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range("2025-01-02", periods=n)
+    return pd.Series(start * np.cumprod(1 + rng.normal(drift, vol, n)), index=idx)
+
+
+def test_attribution_adds_up():
+    a, b, xlk, xlf, spy = _walk(1), _walk(2, start=50), _walk(3), _walk(4), _walk(5)
+    d = a.index
+    txs = [tx(type="deposit", amount=10000, date=str(d[0].date())),
+           tx(type="buy", ticker="AAA", shares=40, price=float(a.iloc[0]) * 1.01, fee=2, date=str(d[0].date())),
+           tx(type="buy", ticker="BBB", shares=60, price=float(b.iloc[0]), date=str(d[0].date())),
+           tx(type="dividend", ticker="AAA", amount=25, date=str(d[60].date())),
+           tx(type="sell", ticker="BBB", shares=30, price=float(b.iloc[100]) * 0.99, date=str(d[100].date())),
+           tx(type="buy", ticker="AAA", shares=10, price=float(a.iloc[120]), date=str(d[120].date()))]
+    sectors = {"AAA": ("Technology", "XLK"), "BBB": ("Financials", "XLF")}
+    res = pf.attribution(txs, {"AAA": a, "BBB": b, "XLK": xlk, "XLF": xlf}, sectors, spy)
+    vh = pf.value_history(txs, {"AAA": a, "BBB": b})
+    assert res["port"] == pytest.approx(float(vh["twr_index"].iloc[-1] - 1), abs=1e-9)
+    assert sum(res["effects"].values()) == pytest.approx(res["active"], abs=1e-9)
+    assert res["by_ticker"]["contribution"].sum() + res["trading_total"] == pytest.approx(res["port"], abs=1e-9)
+    assert res["by_sector"]["allocation"].sum() + res["by_sector"]["selection"].sum() + res["effects"]["cash"] + res["effects"]["trading"] \
+        == pytest.approx(res["active"], abs=1e-6)
+    assert res["effects"]["trading"] < 0  # paid above the close, sold below it, plus a fee
+    sub = pf.attribution(txs, {"AAA": a, "BBB": b, "XLK": xlk, "XLF": xlf}, sectors, spy, start=d[100])
+    assert sub["start"] > d[100] and sum(sub["effects"].values()) == pytest.approx(sub["active"], abs=1e-9)
+
+
+def test_sector_of_maps_industries():
+    assert pf.sector_of("NVDA", "Semiconductors", False) == ("Technology", "XLK")
+    assert pf.sector_of("GOOGL", "Media", False) == ("Communication services", "XLC")
+    assert pf.sector_of("AMZN", "Retail", False) == ("Consumer discretionary", "XLY")
+    assert pf.sector_of("JPM", "Banking", False) == ("Financials", "XLF")
+    assert pf.sector_of("GLD", "", True) == ("Gold & commodities", "GLD")
+    assert pf.sector_of("ZZZ", "", False) == ("Other", "SPY")

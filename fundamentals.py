@@ -41,6 +41,22 @@ DEBT_NONCURRENT = ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligat
 DEBT_CURRENT = ["LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent"]
 SHORT_BORROWINGS = ["CommercialPaper", "ShortTermBorrowings"]
 
+# Statement-analysis lines (balance sheet at each fiscal year end, plus a few income and cash-flow items).
+ASSETS = ["Assets"]
+ASSETS_CURRENT = ["AssetsCurrent"]
+LIABILITIES_CURRENT = ["LiabilitiesCurrent"]
+INVENTORY = ["InventoryNet"]
+RECEIVABLES = ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent"]
+EQUITY = ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"]
+INTEREST = ["InterestExpense", "InterestExpenseNonoperating", "InterestExpenseDebt"]
+DEPRECIATION = ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization", "DepreciationAmortizationAndAccretionNet",
+                "Depreciation"]
+STOCK_COMP = ["ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"]
+INCOME_TAX = ["IncomeTaxExpenseBenefit"]
+PRETAX_INCOME = ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+                 "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments"]
+QUARTER_FRAME = re.compile(r"^CY(\d{4})Q([1-4])$")
+
 
 def annual_series(facts: dict, tags: list[str], unit: str = "USD") -> pd.Series:
     """Yearly values (index = year). The most up-to-date tag wins; older tags fill gaps."""
@@ -61,6 +77,62 @@ def annual_series(facts: dict, tags: list[str], unit: str = "USD") -> pd.Series:
     for s in found[1:]:
         combined = combined.combine_first(s)
     return combined.sort_index()
+
+
+def annual_ends(facts: dict, tags: list[str]) -> dict[int, str]:
+    """Fiscal year-end date behind each calendar-aligned annual value, so balance sheets line up with the income statement."""
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    ends: dict[int, str] = {}
+    for tag in tags:
+        for row in gaap.get(tag, {}).get("units", {}).get("USD", []):
+            m = ANNUAL_FRAME.match(row.get("frame") or "")
+            if m and int(m.group(1)) not in ends and row.get("end"):
+                ends[int(m.group(1))] = row["end"]
+    return ends
+
+
+def instant_series(facts: dict, tags: list[str], ends: dict[int, str], unit: str = "USD") -> pd.Series:
+    """Balance-sheet value at each fiscal year end (index = the same year as the annual flows)."""
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    out: dict[int, float] = {}
+    for tag in tags:
+        by_end: dict[str, tuple[str, float]] = {}
+        for row in gaap.get(tag, {}).get("units", {}).get(unit, []):
+            e = row.get("end")
+            if e and ("start" not in row) and (e not in by_end or (row.get("filed") or "") > by_end[e][0]):
+                by_end[e] = (row.get("filed") or "", float(row["val"]))
+        for year, end in ends.items():
+            if year not in out and end in by_end:
+                out[year] = by_end[end][1]
+    return pd.Series(out, dtype=float).sort_index()
+
+
+def quarterly_series(facts: dict, tags: list[str], unit: str = "USD", derive_q4: bool = True) -> pd.DataFrame:
+    """Quarterly values (three-month periods) with their period end, from the SEC's quarterly frames.
+    There is no 10-Q for a company's fourth fiscal quarter, so for flows it is derived as the fiscal year minus the
+    three quarters inside it, whichever calendar quarter that falls in."""
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    quarters: dict[str, dict] = {}
+    annual: list[dict] = []
+    for tag in tags:
+        for row in gaap.get(tag, {}).get("units", {}).get(unit, []):
+            fr = row.get("frame") or ""
+            if QUARTER_FRAME.match(fr) and row.get("end") and row["end"] not in quarters:
+                quarters[row["end"]] = {"start": row.get("start", ""), "end": row["end"], "value": float(row["val"]), "derived": False}
+            elif ANNUAL_FRAME.match(fr) and row.get("start") and row.get("end"):
+                annual.append({"start": row["start"], "end": row["end"], "value": float(row["val"])})
+    if derive_q4:
+        seen = set()
+        for a in sorted(annual, key=lambda r: r["end"], reverse=True):
+            if a["end"] in seen or a["end"] in quarters:
+                continue
+            seen.add(a["end"])
+            inside = [q for q in quarters.values() if not q["derived"] and q["start"] >= a["start"] and q["end"] <= a["end"]]
+            if len(inside) == 3:
+                quarters[a["end"]] = {"start": max(q["end"] for q in inside), "end": a["end"],
+                                      "value": a["value"] - sum(q["value"] for q in inside), "derived": True}
+    df = pd.DataFrame(sorted(quarters.values(), key=lambda r: r["end"]), columns=["start", "end", "value", "derived"])
+    return df.reset_index(drop=True)
 
 
 def latest_instant(facts: dict, tags: list[str], unit: str = "USD") -> dict | None:
@@ -150,8 +222,31 @@ def build(facts: dict) -> dict:
     if not shares:
         notes.append("Shares outstanding not found.")
 
+    ends = annual_ends(facts, REVENUE + NET_INCOME)
+    debt_hist = instant_series(facts, DEBT_TOTAL, ends)
+    if debt_hist.empty:
+        debt_hist = instant_series(facts, DEBT_NONCURRENT, ends).add(instant_series(facts, DEBT_CURRENT, ends), fill_value=0.0)
+    debt_hist = debt_hist.add(instant_series(facts, SHORT_BORROWINGS, ends), fill_value=0.0)
+    balance = {
+        "assets": instant_series(facts, ASSETS, ends), "assets_current": instant_series(facts, ASSETS_CURRENT, ends),
+        "liabilities_current": instant_series(facts, LIABILITIES_CURRENT, ends), "inventory": instant_series(facts, INVENTORY, ends),
+        "receivables": instant_series(facts, RECEIVABLES, ends), "equity": instant_series(facts, EQUITY, ends),
+        "cash": instant_series(facts, CASH, ends).add(instant_series(facts, SHORT_INVESTMENTS, ends), fill_value=0.0),
+        "debt": debt_hist,
+    }
+    extra = {"interest": annual_series(facts, INTEREST), "depreciation": annual_series(facts, DEPRECIATION),
+             "stock_comp": annual_series(facts, STOCK_COMP), "income_tax": annual_series(facts, INCOME_TAX),
+             "pretax_income": annual_series(facts, PRETAX_INCOME)}
+    quarters = {"revenue": quarterly_series(facts, REVENUE), "net_income": quarterly_series(facts, NET_INCOME),
+                "operating_income": quarterly_series(facts, OPERATING_INCOME), "gross_profit": quarterly_series(facts, GROSS_PROFIT),
+                "eps": quarterly_series(facts, EPS_DILUTED, unit="USD/shares", derive_q4=False)}
+
     keep = lambda s: s[s.index >= (s.index.max() - 9)] if not s.empty else s  # noqa: E731
     return {
+        "balance": {k: keep(v) for k, v in balance.items()},
+        **{k: keep(v) for k, v in extra.items()},
+        "year_ends": ends,
+        "quarters": {k: v.tail(12).reset_index(drop=True) for k, v in quarters.items()},
         "name": facts.get("entityName", ""),
         "revenue": keep(revenue),
         "net_income": keep(net_income),

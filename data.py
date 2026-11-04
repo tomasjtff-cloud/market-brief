@@ -223,6 +223,44 @@ def next_earnings(symbol: str) -> dict | None:
     return {"date": nxt["date"], "eps_estimate": nxt.get("epsEstimate"), "timing": timing}
 
 
+@st.cache_data(ttl=21600, show_spinner=False)
+def earnings_surprises(symbol: str) -> list[dict]:
+    """Reported vs expected EPS for the last quarters (Finnhub earnings surprises, oldest first)."""
+    raw = _finnhub("/stock/earnings", symbol=symbol) or []
+    out = []
+    for r in raw:
+        if r.get("period") and r.get("actual") is not None:
+            out.append({"period": r["period"], "year": r.get("year"), "quarter": r.get("quarter"), "actual": r.get("actual"),
+                        "estimate": r.get("estimate"), "surprise": r.get("surprise"), "surprise_pct": r.get("surprisePercent")})
+    return sorted(out, key=lambda r: r["period"])
+
+
+@st.cache_data(ttl=21600, show_spinner=False)
+def earnings_history(symbol: str, days_back: int = 730) -> list[dict]:
+    """Report dates with EPS and revenue, actual and expected, from the earnings calendar (past and next 120 days)."""
+    today = dt.date.today()
+    data = _finnhub("/calendar/earnings", symbol=symbol,
+                    **{"from": (today - dt.timedelta(days=days_back)).isoformat(),
+                       "to": (today + dt.timedelta(days=120)).isoformat()}) or {}
+    rows = [c for c in data.get("earningsCalendar", []) if c.get("date")]
+    out = [{"date": c["date"], "hour": c.get("hour") or "", "year": c.get("year"), "quarter": c.get("quarter"),
+            "eps_actual": c.get("epsActual"), "eps_estimate": c.get("epsEstimate"),
+            "rev_actual": c.get("revenueActual"), "rev_estimate": c.get("revenueEstimate")} for c in rows]
+    return sorted({r["date"]: r for r in out}.values(), key=lambda r: r["date"])
+
+
+@st.cache_data(ttl=10800, show_spinner=False)
+def earnings_calendar(days_back: int = 7, days_ahead: int = 7) -> list[dict]:
+    """Every US company that reported recently or reports soon (Finnhub earnings calendar), with actuals once out."""
+    today = dt.date.today()
+    data = _finnhub("/calendar/earnings", **{"from": (today - dt.timedelta(days=days_back)).isoformat(),
+                                              "to": (today + dt.timedelta(days=days_ahead)).isoformat()}) or {}
+    return [{"symbol": c.get("symbol"), "date": c.get("date"), "hour": c.get("hour") or "", "eps_estimate": c.get("epsEstimate"),
+             "eps_actual": c.get("epsActual"), "rev_estimate": c.get("revenueEstimate"), "rev_actual": c.get("revenueActual"),
+             "quarter": c.get("quarter"), "year": c.get("year")}
+            for c in data.get("earningsCalendar", []) if c.get("symbol") and c.get("date")]
+
+
 # --------------------------------------------------------------------------- Twelve Data
 TWELVE = "https://api.twelvedata.com"
 
@@ -561,11 +599,13 @@ def sec_facts(ticker: str) -> dict:
 
 
 @st.cache_data(ttl=86400, show_spinner=False, max_entries=60)
-def company_fundamentals(ticker: str) -> dict:
-    """Parsed SEC financials (small), cached instead of the multi-megabyte raw filing data."""
+def company_fundamentals(ticker: str, version: int = 2) -> dict:
+    """Parsed SEC financials (small), cached instead of the multi-megabyte raw filing data. Bump `version` when the parser changes."""
     import fundamentals
 
-    return fundamentals.build(sec_facts(ticker))
+    out = fundamentals.build(sec_facts(ticker))
+    out["version"] = version
+    return out
 
 
 # --------------------------------------------------------------------------- universes
@@ -582,3 +622,76 @@ MEGA_CAPS = [
     ("UNH", "Health care"), ("JNJ", "Health care"), ("ABBV", "Health care"), ("WMT", "Consumer staples"),
     ("COST", "Consumer staples"), ("PG", "Consumer staples"), ("XOM", "Energy"), ("CVX", "Energy"),
 ]
+
+
+# --------------------------------------------------------------------------- data health
+def health_check() -> list[dict]:
+    """Ping every source once, live (no cache), and report whether it answered and how fast. Keys never leave the server."""
+    def finnhub():
+        d = _finnhub("/quote", symbol="SPY")
+        if not d or not d.get("c"):
+            raise DataError("no price returned")
+        return f"SPY {d['c']:,.2f}"
+
+    def twelve():
+        d = _twelve("/quote", symbol="SPY")
+        return f"SPY close {float(d['close']):,.2f}"
+
+    def fred():
+        key = secret("FRED_API_KEY")
+        if not key:
+            raise DataError("FRED_API_KEY is missing from the app secrets.")
+        d = _get_json("https://api.stlouisfed.org/fred/series/observations",
+                      params={"series_id": "DGS10", "api_key": key, "file_type": "json", "sort_order": "desc", "limit": 5})
+        o = next(o for o in d["observations"] if o["value"] not in (".", ""))
+        return f"10Y {o['value']}% ({o['date']})"
+
+    def sec():
+        d = _get_json("https://data.sec.gov/submissions/CIK0000320193.json", headers=_sec_headers())
+        return f"{d.get('name', 'ok')}: latest filing {d['filings']['recent']['filingDate'][0]}"
+
+    def coingecko():
+        d = _get_json("https://api.coingecko.com/api/v3/simple/price", params={"ids": "bitcoin", "vs_currencies": "usd"})
+        return f"BTC ${d['bitcoin']['usd']:,.0f}"
+
+    def dolarapi():
+        rows = _get_json("https://dolarapi.com/v1/dolares")
+        return f"{len(rows)} rates"
+
+    def frankfurter():
+        d = _get_json("https://api.frankfurter.dev/v1/latest", params={"base": "USD", "symbols": "EUR,MXN"})
+        return f"{d['date']}: EUR {d['rates']['EUR']}, MXN {d['rates']['MXN']}"
+
+    def argentinadatos():
+        d = _get_json("https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais/ultimo")
+        return f"{d.get('valor')} bps ({d.get('fecha')})"
+
+    def gemini():
+        key = secret("GEMINI_API_KEY")
+        if not key:
+            raise DataError("GEMINI_API_KEY is missing from the app secrets.")
+        resp = requests.get("https://generativelanguage.googleapis.com/v1beta/models", headers={"x-goog-api-key": key},
+                            params={"pageSize": 50}, timeout=TIMEOUT)
+        resp.raise_for_status()
+        return f"{len(resp.json().get('models', []))} models available"
+
+    def rss():
+        feed = feedparser.parse(requests.get(FEEDS["CNBC"], timeout=TIMEOUT, headers={"User-Agent": "Mozilla/5.0"}).content)
+        if not feed.entries:
+            raise DataError("no entries")
+        return f"{len(feed.entries)} headlines"
+
+    checks = [("Finnhub", "Quotes, profiles, news, earnings", finnhub), ("Twelve Data", "Price history", twelve),
+              ("FRED", "Treasury yields", fred), ("SEC EDGAR", "10-K / 10-Q financials", sec),
+              ("CoinGecko", "Bitcoin", coingecko), ("DolarApi", "Argentine dollar rates", dolarapi),
+              ("Frankfurter (ECB)", "Reference exchange rates", frankfurter), ("ArgentinaDatos", "Country risk", argentinadatos),
+              ("RSS feeds", "Headlines (CNBC sample)", rss), ("Google Gemini", "AI text", gemini)]
+    out = []
+    for name, use, fn in checks:
+        t0 = time.time()
+        try:
+            detail, ok = fn(), True
+        except Exception as exc:  # report, never raise
+            detail, ok = str(exc)[:140], False
+        out.append({"source": name, "use": use, "ok": ok, "ms": int((time.time() - t0) * 1000), "detail": detail})
+    return out

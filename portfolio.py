@@ -510,3 +510,191 @@ def shift_weights(weights: dict[str, float], ticker: str, new_weight: float, fun
     w = {k: max(v, 0.0) for k, v in w.items()}
     s = sum(w.values())
     return {k: v / s for k, v in w.items() if v > 1e-6} if s > 0 else w
+
+
+# =========================================================================== performance attribution
+SECTOR_ETF = {"Technology": "XLK", "Financials": "XLF", "Health care": "XLV", "Consumer discretionary": "XLY",
+              "Communication services": "XLC", "Industrials": "XLI", "Consumer staples": "XLP", "Energy": "XLE",
+              "Utilities": "XLU", "Real estate": "XLRE", "Materials": "XLB"}
+# Finnhub industry names -> S&P 500 (GICS) sectors. First keyword found wins.
+_INDUSTRY_KEYS = [
+    ("Communication services", ("media", "telecommunication", "communications", "entertainment", "interactive")),
+    ("Technology", ("semiconductor", "technology", "software", "electronic", "it services", "computers")),
+    ("Financials", ("bank", "financial", "insurance", "capital markets", "diversified financ", "consumer finance")),
+    ("Health care", ("health", "pharma", "biotech", "life sciences", "medical")),
+    ("Consumer staples", ("beverages", "food", "tobacco", "household", "personal products", "staples")),
+    ("Consumer discretionary", ("retail", "automobile", "auto components", "hotels", "restaurants", "leisure", "textiles",
+                                "apparel", "luxury", "distributors", "diversified consumer", "consumer products", "homebuilding")),
+    ("Energy", ("energy", "oil", "gas")),
+    ("Utilities", ("utilities",)),
+    ("Real estate", ("real estate", "reit")),
+    ("Materials", ("chemicals", "metals", "mining", "packaging", "paper", "forest", "construction materials")),
+    ("Industrials", ("aerospace", "defense", "airlines", "building", "construction", "electrical", "machinery", "industrial",
+                     "logistics", "transportation", "road & rail", "marine", "commercial services", "professional services",
+                     "trading companies")),
+]
+
+
+def sector_of(ticker: str, industry: str | None, etf: bool) -> tuple[str, str]:
+    """(sector name, benchmark ETF used for it). An ETF is its own benchmark, so its whole excess return is allocation."""
+    if etf:
+        return ETF_SECTOR.get(ticker, "Funds"), ticker
+    low = (industry or "").lower()
+    for sector, keys in _INDUSTRY_KEYS:
+        if any(k in low for k in keys):
+            return sector, SECTOR_ETF[sector]
+    return "Other", "SPY"
+
+
+def _link(daily: pd.Series, port: pd.Series, bench: pd.Series | None = None) -> float:
+    """Carino linking: scale daily effects so they add up exactly to the multi-period (active) return."""
+    lg = lambda x: np.log1p(x)  # noqa: E731
+    if bench is None:
+        R = float((1 + port).prod() - 1)
+        K = lg(R) / R if abs(R) > 1e-12 else 1.0
+        k = pd.Series(np.where(port.abs() > 1e-12, lg(port) / port.where(port.abs() > 1e-12, 1), 1.0), index=port.index)
+        return float((daily * k).sum() / K)
+    R, B = float((1 + port).prod() - 1), float((1 + bench).prod() - 1)
+    K = (lg(R) - lg(B)) / (R - B) if abs(R - B) > 1e-12 else 1 / (1 + R)
+    diff = port - bench
+    k = pd.Series(np.where(diff.abs() > 1e-12, (lg(port) - lg(bench)) / diff.where(diff.abs() > 1e-12, 1), 1 / (1 + port)),
+                  index=port.index)
+    return float((daily * k).sum() / K)
+
+
+def attribution(txs: list[dict], closes: dict[str, pd.Series], sectors: dict[str, tuple[str, str]],
+                bench: pd.Series, start: pd.Timestamp | None = None) -> dict | None:
+    """Where the return came from, day by day with the previous close's holdings, linked over the period (Carino).
+
+    Contribution of each position = its weight × its price return, plus dividends. Versus the S&P 500 (SPY, price only):
+      active return = sector bets  Σ w·(sector ETF − SPY)
+                    + cash         −w_cash·SPY
+                    + selection    Σ w·(stock − its sector ETF)   (dividends count here)
+                    + trading      buys/sells done at a price other than that day's close, and fees.
+    """
+    if not txs:
+        return None
+    txs = sorted(txs, key=_order)
+    first = pd.Timestamp(txs[0]["date"])
+    names = [t for t in {t.get("ticker") for t in txs if t.get("ticker")} if t in closes]
+    etfs = {s[1] for s in sectors.values()}
+    px = pd.DataFrame({**{k: closes[k] for k in names}, **{e: closes[e] for e in etfs if e in closes}, "__SPY": bench}).sort_index()
+    px = px[px.index >= first - pd.Timedelta(days=7)].ffill()
+    days = px.index[px.index >= first]
+    if len(days) < 3:
+        return None
+    by_day: dict[pd.Timestamp, list[dict]] = {}
+    for t in txs:
+        nxt = days[days >= pd.Timestamp(t["date"])]
+        if len(nxt):
+            by_day.setdefault(nxt[0], []).append(t)
+    shares: dict[str, float] = {}
+    cash = 0.0
+    prev_val = None
+    recs, contrib = [], []
+    for i, d in enumerate(days):
+        c_day: dict[str, float] = {}
+        trading, flow = 0.0, 0.0
+        w_prev: dict[str, float] = {}
+        if i > 0 and prev_val and prev_val > 0:
+            pd_ = days[i - 1]
+            for tk, n in shares.items():
+                if n > 1e-9 and tk in px.columns and pd.notna(px.at[pd_, tk]) and pd.notna(px.at[d, tk]):
+                    w_prev[tk] = n * float(px.at[pd_, tk]) / prev_val
+                    c_day[tk] = n * (float(px.at[d, tk]) - float(px.at[pd_, tk])) / prev_val
+        for t in by_day.get(d, []):
+            typ = t["type"]
+            if typ in ("deposit", "cash_adjust"):
+                cash += t["amount"]
+                flow += t["amount"]
+                if cash < 0:
+                    flow -= cash
+                    cash = 0.0
+            elif typ == "withdraw":
+                take = min(t["amount"], cash)
+                cash -= take
+                flow -= take
+            elif typ == "dividend":
+                cash += t["amount"]
+                if prev_val:
+                    c_day[t["ticker"]] = c_day.get(t["ticker"], 0.0) + t["amount"] / prev_val
+            elif typ == "buy":
+                spend = t["shares"] * t["price"] + t["fee"]
+                if spend > cash:
+                    flow += spend - cash
+                    cash = 0.0
+                else:
+                    cash -= spend
+                shares[t["ticker"]] = shares.get(t["ticker"], 0.0) + t["shares"]
+                if prev_val and t["ticker"] in px.columns and pd.notna(px.at[d, t["ticker"]]):
+                    trading += (t["shares"] * (float(px.at[d, t["ticker"]]) - t["price"]) - t["fee"]) / prev_val
+            elif typ == "sell":
+                held = shares.get(t["ticker"], 0.0)
+                qty = min(t["shares"], held)
+                shares[t["ticker"]] = held - qty
+                cash += qty * t["price"] - t["fee"]
+                if prev_val and t["ticker"] in px.columns and pd.notna(px.at[d, t["ticker"]]):
+                    trading += (qty * (t["price"] - float(px.at[d, t["ticker"]])) - t["fee"]) / prev_val
+        mv = sum(n * float(px.at[d, tk]) for tk, n in shares.items() if n > 1e-9 and tk in px.columns and pd.notna(px.at[d, tk]))
+        val = mv + cash
+        if i > 0 and prev_val and prev_val > 0:
+            r = (val - flow) / prev_val - 1
+            rb = float(px.at[d, "__SPY"] / px.at[days[i - 1], "__SPY"] - 1)
+            w_cash = 1 - sum(w_prev.values())
+            sec_eff, sel_eff = 0.0, 0.0
+            for tk, w in w_prev.items():
+                etf = sectors.get(tk, ("Other", "SPY"))[1]
+                col = "__SPY" if etf == "SPY" or etf not in px.columns else etf
+                rs = float(px.at[d, col] / px.at[days[i - 1], col] - 1)
+                sec_eff += w * (rs - rb)
+                sel_eff += c_day.get(tk, 0.0) - w * rs
+            for tk in c_day:  # dividends from positions sold before the previous close
+                if tk not in w_prev:
+                    sel_eff += c_day[tk]
+            resid = r - sum(c_day.values()) - trading
+            recs.append({"date": d, "r": r, "rb": rb, "sector": sec_eff, "cash": -w_cash * rb, "selection": sel_eff,
+                         "trading": trading + resid, "w_cash": w_cash})
+            contrib.append({"date": d, **c_day, "__trading": trading + resid, **{f"w:{k}": v for k, v in w_prev.items()}})
+        prev_val = val
+    if not recs:
+        return None
+    daily = pd.DataFrame(recs).set_index("date")
+    cdf = pd.DataFrame(contrib).set_index("date").fillna(0.0)
+    if start is not None:
+        daily, cdf = daily[daily.index > start], cdf[cdf.index > start]
+    if len(daily) < 2:
+        return None
+    port, benchr = daily["r"], daily["rb"]
+    R, B = float((1 + port).prod() - 1), float((1 + benchr).prod() - 1)
+    rows = []
+    for tk in [c for c in cdf.columns if not c.startswith("w:") and c != "__trading"]:
+        w = cdf.get(f"w:{tk}", pd.Series(0.0, index=cdf.index))
+        held = w > 0
+        sec, etf = sectors.get(tk, ("Other", "SPY"))
+        rows.append({"ticker": tk, "sector": sec, "benchmark": etf, "avg_weight": float(w[held].mean()) if held.any() else 0.0,
+                     "days": int(held.sum()), "contribution": _link(cdf[tk], port)})
+    by_ticker = pd.DataFrame(rows, columns=["ticker", "sector", "benchmark", "avg_weight", "days", "contribution"])
+    by_ticker = by_ticker.sort_values("contribution", ascending=False).reset_index(drop=True)
+    effects = {k: _link(daily[k], port, benchr) for k in ("sector", "cash", "selection", "trading")}
+    # sector table: contribution, allocation and selection per sector (linked with the same factors)
+    sec_rows = []
+    for sec, grp in by_ticker.groupby("sector"):
+        tks = list(grp["ticker"])
+        w = sum(cdf.get(f"w:{t}", 0.0) for t in tks)
+        alloc_d, sel_d = pd.Series(0.0, index=cdf.index), pd.Series(0.0, index=cdf.index)
+        for t in tks:
+            wt = cdf.get(f"w:{t}", pd.Series(0.0, index=cdf.index))
+            etf = sectors.get(t, ("Other", "SPY"))[1]
+            src = bench if etf == "SPY" or etf not in closes else closes[etf]
+            rs = src.reindex(px.index).ffill().pct_change().reindex(cdf.index).fillna(0.0)
+            alloc_d += wt * (rs - daily["rb"])
+            sel_d += cdf[t] - wt * rs
+        sec_rows.append({"sector": sec, "avg_weight": float(w.mean()) if hasattr(w, "mean") else 0.0,
+                         "contribution": float(grp["contribution"].sum()),
+                         "allocation": _link(alloc_d, port, benchr), "selection": _link(sel_d, port, benchr)})
+    by_sector = pd.DataFrame(sec_rows, columns=["sector", "avg_weight", "contribution", "allocation", "selection"])
+    by_sector = by_sector.sort_values("contribution", ascending=False).reset_index(drop=True)
+    cum = pd.DataFrame({"portfolio": (1 + port).cumprod() - 1, "benchmark": (1 + benchr).cumprod() - 1})
+    return {"start": daily.index[0], "end": daily.index[-1], "days": len(daily), "port": R, "bench": B, "active": R - B,
+            "effects": effects, "trading_total": _link(cdf["__trading"], port), "by_ticker": by_ticker, "by_sector": by_sector,
+            "cum": cum, "avg_cash": float(daily["w_cash"].mean())}
